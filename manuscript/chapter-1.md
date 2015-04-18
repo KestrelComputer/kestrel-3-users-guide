@@ -15,9 +15,28 @@ At the time of this publication, the Kestrel-3 does not exist in physical hardwa
 
 ## Installing the Kestrel-3 Emulator
 
-If you're using a 32-bit Ubuntu Linux 14.04 distribution, the following instructions should be sufficient to equip your computer with the latest version of the Kestrel-3 emulator.
+The Kestrel-3 computer remains under development, and at the time of this writing, is not suitable for general purpose use.  However, if you're interested in contributing to the development of the Kestrel-3 software, particularly its emulator, development toolchain, or operating system, these instructions should be able to get you on your way.
 
-However, if you're running under a 64-bit Ubuntu release, you'll want to perform these steps.  If your user account lacks sudo privileges, you may need your administrator's assistance to activate 32-bit compatibility.
+My development environments include MacOS X 10.10, Linux Mint, and Ubuntu Linux (64-bit).  Below, I describe how to configure a bare-bones Ubuntu 14.04 distribution to support elementary Kestrel-3 development, and should be sufficient to let you follow along with the examples in the remainder of this book.
+
+### Installing SwiftForth
+
+I used SwiftForth to write the RISC-V assembler.  This assembler will eventually be used to construct the system firmware.
+
+    wget http://www.forth.com/downloads/SwiftForth-linux-osx-eval.tgz
+    tar xvzf SwiftForth-linux-osx-eval.tgz
+    sudo ln -s /home/sfalvo/SwiftForth/bin/linux/sf /bin/sf
+
+You should try to invoke the `sf` command now to see if it works.  It will be a 32-bit binary, so while it'll run on all 32-bit Linux distributions, you have about 50% chance that it will not run correctly on a 64-bit system.  This is because not all 64-bit Linux distributions come equipped with 32-bit compatibility turned on by default.
+
+    $ sf
+    SwiftForth i386-Mac OS X 3.5.6 26-Oct-2014
+    bye
+    $ _
+
+If `sf` can be run successfully, you'll see the SwiftForth banner, and it will wait for your input.  Type `bye` to exit the interpreter.
+
+If you do not see the banner, or you get an error message, chances are your distribution does not have 32-bit compatibility enabled.  The following instructions should be invoked at this time to turn it on:
 
     sudo bash
     dpkg --add-architecture i386
@@ -26,15 +45,8 @@ However, if you're running under a 64-bit Ubuntu release, you'll want to perform
     apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386
     exit
 
-This will let your Linux distribution interoperate with the 32-bit SwiftForth binary.
+This will let your Linux distribution interoperate with the 32-bit SwiftForth binary.  You should be able to run the `sf` command again at this time as described above.
 
-### Installing SwiftForth
-
-I used SwiftForth to write the RISC-V assembler.  This assembler will be used to construct the system firmware.
-
-    wget http://www.forth.com/downloads/SwiftForth-linux-osx-eval.tgz
-    tar xvzf SwiftForth-linux-osx-eval.tgz
-    sudo ln -s /home/sfalvo/SwiftForth/bin/linux/sf /bin/sf
 
 ### Installing GCC
 
@@ -50,10 +62,12 @@ We use Git to manage the source code repository for the Kestrel-3 design.  You m
 
 ### Installing Redo
 
-I chose Redo to provide build automation.  Redo has several advantages over Make:
+I chose Redo to provide build automation and dependency analysis.  For my needs, Redo has several advantages over Make:
 
 * The `.do` files describing target rules appear where the target will appear in the filesystem.
 * The `.do` files are simple shell scripts, directly executed by the `redo` command(s).
+
+I find this helps keep my build descriptions focused and modular, albeit at the cost of losing the one-stop-shop benefit of having everything in a single Makefile.
 
     git clone https://github.com/apenwarr/redo
     cd redo

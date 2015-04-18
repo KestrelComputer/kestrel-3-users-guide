@@ -95,5 +95,5 @@ This should bring you to the following prompt:
     MLM/K3 V1
     * _
 
-If this message, or a reasonable facsimile thereof, doesn't appear on your computer, something went wrong; try looking for error messages and fixing them, then trying again.
+If this message, or a reasonable facsimile thereof, doesn't appear on your computer, something went wrong; try looking for error messages and fixing them, then try again.
 

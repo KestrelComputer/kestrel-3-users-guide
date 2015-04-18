@@ -78,7 +78,6 @@ I find this helps keep my build descriptions focused and modular, albeit at the 
 
 At last, we have what it takes to put everything together and build a Kestrel emulator along with its firmware.
 
-    cd ..
     git clone https://github.com/sam-falvo/kestrel
     cd kestrel/3
     redo

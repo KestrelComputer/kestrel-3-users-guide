@@ -36,7 +36,7 @@ You should try to invoke the `sf` command now to see if it works.  It will be a 
 
 If `sf` can be run successfully, you'll see the SwiftForth banner, and it will wait for your input.  Type `bye` to exit the interpreter.
 
-If you do not see the banner, or you get an error message, chances are your distribution does not have 32-bit compatibility enabled.  The following instructions should be invoked at this time to turn it on:
+If you do not see the banner, or you get an error message, chances are your distribution does not have 32-bit compatibility enabled.  If you're running **Ubuntu 14 or earlier**, the following instructions should be invoked at this time to turn it on.  These instructions *will not* work for Ubuntu 15 or later.  As soon as I learn more about how to enable support for 32-bit software in these later versions of Ubuntu, I'll list the steps here.
 
     sudo bash
     dpkg --add-architecture i386

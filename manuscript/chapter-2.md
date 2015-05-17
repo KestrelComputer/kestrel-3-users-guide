@@ -109,9 +109,9 @@ RAM differs from ROM in that you can alter its contents; but, of course, it lose
 
 ### What's Special About Random Access?
 
-Random access means that the microprocessor is free to read or alter any byte from memory that it desires, whenever it desires.  For example, when the computer is turned on for the first time, the Kestrel-3 will start reading instructions from location $0000000000002000 (or, in decimal, 8192).  It did not have to read locations 0 through 8191 first to do so.  This saves a great deal of time, as you can imagine, as the computer often must process information from widely separated locations in memory.
+Random access means that the microprocessor is free to read or alter any byte from memory that it desires, whenever it desires.  For example, when the computer is turned on for the first time, the Kestrel-3 will start reading instructions from location $FFFFFFFFFFFFFF00 (or, in decimal, 18,446,744,073,709,551,360).  It did not have to read locations 0 through 18,446,744,073,709,551,359 first to do so.  Even if the computer could read memory at a rate of 10 billion fetches per second, it'd still take over *58 years* for the computer to get around to reading this location.  Clearly, random access saves a great deal of time, as the computer often must process information from widely separated locations in memory.
 
-Sequential access, on the other hand, is what it reads on the tin.  To access a byte of memory at some arbitrary location, you must first read (and, usually, discard) all preceding bytes.  Sequential accesses typically happen when communicating with I/O devices.  I won't discuss it furher here, but be aware that various sequential access techniques exist and are useful in appropriate contexts.
+Sequential access, on the other hand, is what it reads on the tin.  To access a byte of memory at some arbitrary location, you must first read (and, perhaps, discard as uninteresting) all preceding bytes.  Sequential accesses typically happen when communicating with I/O devices.  I won't discuss it furher here, but be aware that various sequential access techniques exist and are useful in appropriate contexts.
 
 
 
@@ -121,34 +121,41 @@ How do you know if you're working with RAM or ROM?  For that matter, given the `
 
 Remember our chess board approximation from before?  Remember how I'd said that they're laid out two-dimensionally?  If you notice, along one edge of the chess board, you'll find the letters A, B, C, D, E, F, G, and H.  Along the other edge, numbers from 1 through 8.  A player can specify any location on the board by just giving one letter, and one number.  In fact, if you ever played chess on a computer before, you probably used this technique to indicate the pieces you wanted to move.  This number and letter pair are said to be *coordinates*, but for our purposes, we call them *addresses*; with that number, we can "address" any element on the chess board.
 
-Computer memory works the same way, but they use a single (potentially very large) number.
+Computer memory works the same way, but they use a single (potentially very large, as illustrated earlier) number.
 
-We call the microprocessor in the Kestrel-3 *byte-addressible.*  This means that the microprocessor can, with a suitably large enough number, identify where information is stored down to individual bytes.  Since the Kestrel-3 is a 64-bit machine, an address can be written with up to 16 nybbles.  This represents an enormous amount of space to put things.  Go ahead and calculate it out for yourself!  You have sixteen symbols, each of which can be any one of those 16 hexadecimal digits.  What number do you get?  That's how many different bytes of memory the Kestrel-3 is capable of addressing.  It's almost certainly far more than you'll ever need in a computer like the Kestrel-3.  Indeed, even enterprise-grade, big-iron computers, such as mainframes and distributed clusters, aren't expected to top out their 64-bits of space until after the year 2030!
+We call the microprocessor in the Kestrel-3 *byte-addressible.*  This means that the microprocessor can, with a suitably large enough number, identify where information is stored down to individual bytes.  Since the Kestrel-3 is a 64-bit machine, an address can be written with up to 16 nybbles.  This represents an enormous amount of space to put things.  It's almost certainly far more than you'll ever need in a computer like the Kestrel-3.  Indeed, even enterprise-grade, big-iron computers, such as mainframes and distributed clusters, aren't expected to top out their 64-bits of space until after the year 2030!
 
-When the computer powers on for the first time, the microprocessor needs to start executing software from a well-known location in memory.  The precise details of how this works falls outside the scope of this chapter; however, I will say that RISC-V compatible processors begin their search for software at address $0000000000002000.  Since ROM memory holds its information even when power is off, it makes sense to place the computer's system software at this location.  This explains why, if you read something called a *memory map*, which is something that tells you what kind of memory or hardware I/O devices can be found at which addresses, ROM appears starting at address $0000000000000000, and is large enough to cover up to address $0000000000002000.
+When the computer powers on for the first time, the microprocessor needs to start executing software from a well-known location in memory.  The precise details of how this works falls outside the scope of this chapter; however, I will say that RISC-V compatible processor used in the Kestrel begins its search for software at address $FFFFFFFFFFFFFF00.  Since ROM memory holds its information even when power is off, it makes sense to place the computer's system software at this location.  This explains why, if you read something called a *memory map*, which is something that tells you what kind of memory or hardware I/O devices can be found at which addresses, ROM appears starting at address $FFFFFFFFFFFF0000.
 
 I reproduce the Kestrel-3 emulator's memory map below:
 
-    Starting from       You'll find this    and ending here,
+    Starting from       you'll find this    and ending here,
     ----------------    -----------------   ----------------
-    0000000000000000    ROM                 00000000000FFFFF
-    0100000000000000    RAM                 0100000000FFFFFF
-    0200000000000000    Unused as of V0.1   0EFFFFFFFFFFFFFF
-    0F00000000000000    Debugger Port       0F00000000000001
-    1000000000000000    Unused              FFFFFFFFFFFFFFFF
+    0000000000000000    RAM                 0000000000FFFFFF
+    0100000000000000    Unused as of V0.2   0DFFFFFFFFFFFFFF
+    0E00000000000000    Debugger Port       0E00000000000001
+    0F00000000000000    Unused              0FFFFFFFFFFEFFFF
+    0FFFFFFFFFFF0000    ROM (duplicate)     0FFFFFFFFFFFFFFF
+    1000000000000000    Unused              FFFFFFFFFFFEFFFF
+    FFFFFFFFFFFF0000    ROM                 FFFFFFFFFFFFFFFF
     ----------------    -----------------   ----------------
 
 Contrast this against a proposed configuration for the Digilent Nexys2 version of the Kestrel-3 hardware:
 
-    0000000000000000    ROM                 00000000000FFFFF
-    0100000000000000    RAM                 0100000000FFFFFF
-    0200000000000000    Keyboard and Mouse  020000000000001F
-    0300000000000000    Video Controller    03000000000000FF
-    0400000000000000    SD Card, GPIO       040000000000000F
-    0500000000000000    Unassigned          0FFFFFFFFFFFFFFF
-    1000000000000000    Expansion           FFFFFFFFFFFFFFFF
+    Starting from       you'll find this    and ending here,
+    ----------------    -----------------   ----------------
+    0000000000000000    RAM                 0000000000FFFFFF
+    0100000000000000    Keyboard and Mouse  010000000000001F
+    0200000000000000    Video Controller    02000000000000FF
+    0300000000000000    SD Card, GPIO       030000000000000F
+    0400000000000000    Unassigned          0FFFFFFFFFFEFFFF
+    0FFFFFFFFFFF0000    ROM (duplicate)     0FFFFFFFFFFFFFFF
+    1000000000000000    Expansion Slots     EFFFFFFFFFFFFFFF
+    F000000000000000    Unassigned          FFFFFFFFFFFEFFFF
+    FFFFFFFFFFFF0000    ROM                 FFFFFFFFFFFFFFFF
+    ----------------    -----------------   ----------------
 
-You'll find more detailed memory maps in the appendices.
+(The reason why the same ROM image appears twice in the memory map falls outside the scope of this users guide; however, [a reason does exist](http://sam-falvo.github.io/kestrel/2014/12/25/kestrel-update-emulator-memory-map/).)
 
 Note that the emulator models a reasonably close subset of one particular hardware configuration for the Kestrel-3, but it is not a perfect match.  It's conceivable that future hardware configurations will have different memory maps still.  Since an address selects which hardware component(s) the CPU will talk to, it's easy to see that a memory map for one computer may well differ from that of another, even if they're part of the same family.  For this reason, some types of system software, such as operating systems, hardware abstraction layers (HALs), and Basic Input/Output Systems (BIOS), all exist to not only enable the user to interact with the computer, but also to help application software run without concern for a specific computer's hardware configuration.
 
@@ -156,51 +163,58 @@ Note that the emulator models a reasonably close subset of one particular hardwa
 
 You now have the required background to dump the contents of memory to the screen and, with some practice, make some reasonable sense of the results.  To look at a particular byte in memory, you need only type its address, and use the `@` command, like so:
 
-    * 0000000000002000 @
+    * FFFFFFFFFFFF0000 @
 
 What comes back to you may be different, but it should look something like this response:
 
-    0000000000002000:03 .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
+    FFFFFFFFFFFF0000:33 .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
     * _
 
 You may continue to look at subsequent addresses by simply repeating the process:
 
-    * 0000000000002000 @
-    0000000000002000:03  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
-    * 0000000000002001 @
-    0000000000002000: . 13  .  .  .  .  .  .  .  .  .  .  .  .  .  .
-    * 0000000000002002 @
-    0000000000002000: .  . 80  .  .  .  .  .  .  .  .  .  .  .  .  .
+    * FFFFFFFFFFFF0000@
+    FFFFFFFFFFFF0000:33  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 
+    * FFFFFFFFFFFF0001@
+    FFFFFFFFFFFF0000: . 60  .  .  .  .  .  .  .  .  .  .  .  .  .  . 
+    * FFFFFFFFFFFF0002@
+    FFFFFFFFFFFF0000: .  . 00  .  .  .  .  .  .  .  .  .  .  .  .  . 
 
 As you can imagine, it's *really* inconvenient to inspect memory one byte at a time like this.  You can use `.` to tell the MLM to inspect a range of memory:
 
-    * 0000000000002000.0000000000002003 @
-    0000000000002000:03 13 80 00  .  .  .  .  .  .  .  .  .  .  .  .
+    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
+    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
     * _
 
-You can look at any contiguous region of memory using this same approach.  If you want to display more than 16 bytes at a time, it will break the read-out into 16-byte chunks for easier reading, like so:
+You can look at any contiguous region of memory using this same approach, as long as the second address is larger than the first.  If you want to display more than 16 bytes at a time, it will break the read-out into 16-byte chunks for easier reading, like so:
 
-    (REPLACE ME WITH REAL DATA)
-    * 0000000000002000.000000000000203F @
-    0000000000002000:03 13 80 00 03 13 80 00 03 13 80 00 03 13 80 00
-    0000000000002010:03 13 80 00 03 13 80 00 03 13 80 00 03 13 80 00
-    0000000000002020:03 13 80 00 03 13 80 00 03 13 80 00 03 13 80 00
-    0000000000002030:03 13 80 00 03 13 80 00 03 13 80 00 03 13 80 00
+    * FFFFFFFFFFFF0000.FFFFFFFFFFFF003F@
+    FFFFFFFFFFFF0000:33 60 00 00 EF 00 80 1E 00 00 00 00 00 00 00 0E 
+    FFFFFFFFFFFF0010:00 00 01 00 00 00 00 00 4D 4C 4D 2F 4B 33 20 56 
+    FFFFFFFFFFFF0020:30 2E 34 0A 49 4E 53 4E 20 41 44 44 52 20 41 54 
+    FFFFFFFFFFFF0030:20 20 20 20 20 20 20 49 4E 53 4E 20 41 43 43 45 
     * _
 
 If we want to look at the contents of RAM instead of ROM, simply change the address (range) used.
 
-    * 0100000000000000.010000000000003F @
+    * 0000000000000000.000000000000003F@
+    0000000000000000:00 00 00 00 00 00 00 0E 00 00 01 00 00 00 00 00 
+    0000000000000010:08 00 FF FF FF FF FF 0F B6 0E 00 00 00 00 00 00 
+    0000000000000020:08 00 FF FF FF FF FF 0F 00 00 01 00 00 00 00 00 
+    0000000000000030:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    * _
+
+(Tip: You can also just write `0.3F@`, since leading zeros are assumed.  This is why, when accessing ROM, we always had to type so many `F`s!)
 
 You'll probably find that when looking at memory layouts like this, you come to rely on the relative position of information in the display.  To make it easier to read memory dumps with this technique, the MLM will pad a dump with periods as appropriate:
 
-    * 0000000000002000.0000000000002003 @
-    0000000000002000:03 13 80 00  .  .  .  .  .  .  .  .  .  .  .  . 
-    * 0000000000002004.0000000000002007 @
-    0000000000002000: .  .  .  . 03 13 80 00  .  .  .  .  .  .  .  . 
-    * 000000000000200E.0000000000002013 @
-    0000000000002000: .  .  .  .  .  .  .  .  .  .  .  .  .  . 80 00
-    0000000000002010:03 13 80 00  .  .  .  .  .  .  .  .  .  .  .  .
+    * 0.3@
+    0000000000000000:00 00 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
+    * 4.7@
+    0000000000000000: .  .  .  . 00 00 00 0E  .  .  .  .  .  .  .  . 
+    * 8.B@
+    0000000000000000: .  .  .  .  .  .  .  . 00 00 01 00  .  .  .  . 
+    * C.F@
+    0000000000000000: .  .  .  .  .  .  .  .  .  .  .  . 00 00 00 00 
     * _
 
 This keeps the data you're interested in a consistent location on the screen at all times.
@@ -209,12 +223,12 @@ This keeps the data you're interested in a consistent location on the screen at 
 
 The `,` command changes a single byte of memory.  For example, if we wanted to store the text string `HI` into RAM, we could use a command like the following:
 
-    * 0100000000010000.48,49,
+    * 10000.48,49,
     * _
 
 You can verify the information is stored by dumping that region of memory again:
 
-    * 0100000000010000.0100000000010001@
+    * 10000.10001@
     0100000000010000:48 49  .  .  .  .  .  .  .  .  .  .  .  .  .  .
     * _
 
@@ -222,12 +236,14 @@ To prove to yourself that it works, try repeating the above exercise, except usi
 
 Note that you can confirm to yourself that ROM is, truly, read-only by attempting to store data into low memory:
 
-    * 80.8F@
-    0000000000000080:CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
-    * 80.11,22,33,44,
-    * 80.8F@
-    0000000000000080:CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
+    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
+    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
+    * FFFFFFFFFFFF0000.48,49,
+    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
+    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
     * _
+
+Depending on the version of the emulator you use, you might find you see warnings about attempts to write into ROM.  These can be safely ignored for now, for as you can see above, your attempts to write into ROM space are ignored.  When developing software for the Kestrel, though, you'll want to watch out for warnings like these, as they indicate potentially buggy software.  If you remember working with Windows 3.1, you've probably seen their "general protection fault" messages (or "segmentation faults" in Linux), that's the computer preventing exactly that kind of errant memory access.
 
 Pro-tip: If you know you're wanting to store a number larger than a byte, then you can type the number naturally, provided it fits inside of 64 bits, and use as many commas as required to store the whole number.  For example, a 16-bit number could be written as `4948,,`, a 32-bit number as `DEADBEEF,,,,`, and so on.  Unfortunately, no corresponding method exists for reading memory out as 16-bit or larger quantities.
 
@@ -243,55 +259,79 @@ These registers are addressed by name, ranging from X1 through X31.  Note that a
 When a program invokes the MLM, either through an SBREAK instruction or by using a JAL or JALR instruction to invoke the MLM directly, it *saves* the previously running program's registers in RAM for inspection.  You can use the `X` command to address this special location, and `:` to inspect it.  For example, to dump all 32 general purpose registers, you'd write:
 
     * 0X.1FX:
+    0000000000000010: .  .  .  .  .  .  .  . B6 0E 00 00 00 00 00 00 
+    0000000000000020:08 00 FF FF FF FF FF 0F 00 00 01 00 00 00 00 00 
+    0000000000000030:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000040:00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000050:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000060:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000070:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000080:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000090:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000A0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000B0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000C0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000D0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000E0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    00000000000000F0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000100:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0000000000000110:00 00 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
+    * _
 
 Here, instead of using `@` to inspect memory, we use `:`.  This is a special version of the memory dump command which knows how to compute the appropriate addresses used by the MLM to represent the interrupted program's registers.  Indeed, when the result appears on the screen, it looks like you had used the `@` command all along.
 
+*Note:* Observe that register `0X` has a non-zero value (`B6 0E`...)!  Since X0 always holds zero, the machine-language monitor uses its memory space for a different purpose.
+
+You can use `:` with a single address as well:
+
     * 0X:
-    0100000000000000:00 00 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
-    * 3X:
-    0100000000000010: .  .  .  .  .  .  .  . 00 00 00 00 00 00 00 00
+    0000000000000010: .  .  .  .  .  .  .  . B6 0E 00 00 00 00 00 00 
+    * 5X:
+    0000000000000040:00 00 01 00 00 00 00 00  .  .  .  .  .  .  .  . 
     * _
 
 As you might imagine, since the `X` command merely computes a memory address to work with, we can use it with the `,` command to effect changes to the interrupted program's registers as well.  For example, if we want to set X1 to the value $1111, and X2 to $2222, we would write:
 
-    * 1X.1111,,
-    * 2X.2222,,
+    * 1X.1111,,,,,,,,
+    * 2X.2222,,,,,,,,
     * _
 
-Be careful not to double-up your Xs.  It will result in an incorrect address and can lead to memory corruption if you're not careful.
+*Note:* Be careful not to double-up your Xs.  It will result in an incorrect address and can lead to memory corruption if you're not careful.
 
+Can you see why I used eight `,`s instead of just two?  What would happen if I just used two?
 
 ## Your First Program
 
 Now that you know how to write program bytes into RAM, and how to pass that program information it needs to run via CPU registers, let's now program the Kestrel-3 to add two numbers.  Without going into the process of how I arrived at these numbers, you can enter the following command:
 
-    * 0100000000010000.B3,81,20,00,13,62,10,40,13,12,32,00,67,00,02,00,
+    * 10000.B3,81,20,00,73,00,10,00,
     * _
 
 This program takes two numbers, in th X1 and X2 registers, and returns the result in X3.  So, let's plug in some values to add:
 
-    * 1X.1234,,
-    * 2X.3210,,
-    * 3X.0000,,
+    * 1X.1234,,,,,,,,
+    * 2X.3210,,,,,,,,
+    * 3X.0000,,,,,,,,
     * _
 
 This places the value $1234 in register X1, and $3210 in register X2, and finally, zero in X3.  We can confirm the registers are set accordingly like so:
 
     * 1X.3X:
-    0100000000000000: .  .  .  .  .  .  .  . 34 12 00 00 00 00 00 00
-    0100000000000010:10 32 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    0000000000000020:34 12 00 00 00 00 00 00 10 32 00 00 00 00 00 00 
+    0000000000000030:00 00 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
     * _
 
 We execute the program by telling the monitor where to go:
 
-    * 0100000000010000G
-    MLM/K3 V1
+    * 10000g
+    MLM/K3 V0.4
+    BREAK AT           0000000000010004
     * _
 
 We should be able to inspect the registers at this point:
 
     * 3X:
-    0100000000000010: .  .  .  .  .  .  .  . 44 44 00 00 00 00 00 00
+    0000000000000030:44 44 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
     * _
 
 If the result isn't $4444, something went wrong.  Double-check that the numbers you typed above for the program are correct and try again.  If it matches the result give here, congradulations!  You've just written your very first Kestrel-3 program!

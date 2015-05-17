@@ -132,7 +132,7 @@ I reproduce the Kestrel-3 emulator's memory map below:
     Starting from       you'll find this    and ending here,
     ----------------    -----------------   ----------------
     0000000000000000    RAM                 0000000000FFFFFF
-    0100000000000000    Unused as of V0.1   0DFFFFFFFFFFFFFF
+    0100000000000000    Unused as of V0.2   0DFFFFFFFFFFFFFF
     0E00000000000000    Debugger Port       0E00000000000001
     0F00000000000000    Unused              0FFFFFFFFFFEFFFF
     0FFFFFFFFFFF0000    ROM (duplicate)     0FFFFFFFFFFFFFFF

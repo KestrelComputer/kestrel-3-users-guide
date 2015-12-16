@@ -98,7 +98,7 @@ Each command is responsible for parsing out its own parameters as needed, so not
 
 ## Volumes, Directories, and Files
 
-A book contains a number of chapters inside.  These chapters typically will contain information that you can read and enjoy.  This book might, then, be part of a related series of books; think of an encyclopaedia for an example.  In this case, how do you identify the appropriate book out of the collection?  We speak of such texts as *volumes*.  Programs, their data files, and configuration settings need to be stored somewhere, as well.  Since electronic storage media store a plurality of these things, by way of analogy to books, these media are also called *volumes*.
+A book contains a number of chapters.  These chapters typically will contain information that you can read and enjoy.  This book might, then, be part of a related series of books; think of an encyclopaedia for an example.  In this case, how do you identify the appropriate book out of the collection?  We speak of such texts as *volumes*.  Programs, their data files, and configuration settings need to be stored somewhere, as well.  Since electronic storage media store a plurality of these things, by way of analogy to books, these media are also called *volumes*.
 
 Each volume contains a table, called a *directory* or, synonymously, a *volume table of contents* (VTOC), that tells STS what information is available on the volume.  Each unit of information is given a name, and is associated with a location in the storage medium's addressible space where to find the information itself.  These units of information are known as *files*.
 
@@ -154,7 +154,7 @@ STS implements only a single directory level.  This might become a problem if yo
 
 The first component, `m2`, is known as the *high-level qualifier*, often abbreviated to HLQ.  In this case, we contextually know that these files are intended to be used by the Milestone-2 application.  The last component is often called the *low-level qualifier*, or LLQ.  This is what tells you which specific kind of file it is.  
 
-I should take this moment to point out that STS itself does not have any awareness of qualifiers or their semantic significance.  Qualifiers are strictly intended for human consumption, a tool to help you organize your files.  However, that said, some programs may assign significance to some qualifiers.  For example, the command shell in STS V1.0 through V1.2 required all programs to have the `PRG.` prefix, even though the STS kernel couldn't care less.
+I should take this moment to point out that STS itself does not have any awareness of qualifiers or their semantic significance.  Qualifiers are strictly intended for human consumption, a tool to help you organize your files.  However, that said, *individual programs* that run under STS may assign significance to some qualifiers.  For example, the command shell in STS V1.0 through V1.2 required all programs to have the `PRG.` prefix, even though the STS kernel couldn't care less.
 
 ## Command Reference
 

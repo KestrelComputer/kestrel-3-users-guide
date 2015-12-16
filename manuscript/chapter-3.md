@@ -78,14 +78,14 @@ and pressing ENTER.  But, if you make a mistake,
 
 you'll need to backspace to the first `l`, and retype the remainder of the command line.
 
-NOTE: You'll notice a lack of more sophisticated editing commands.  E.g., CTRL-A, CTRL-E, CTRL-F, the up- and down-arrow keys, etc. do not work.  Not only that, but typing them may well cause the shell to act strangely.  For example, on my development computer, typing `/rom//`, tap the backspace key, then `hello` will cause STS to report that `/rom/hello` is not found, even though that apparently is the exact same command I had you type above.  This is more to do with the incompleteness of STS itself rather than my ambitions for the OS.  At some point in the future, after higher priority tasks are resolved, I will revisit the user interface and add more convenience features.
+NOTE: You'll notice a lack of more sophisticated editing commands.  E.g., CTRL-A, CTRL-E, CTRL-F, the up- and down-arrow keys, etc. do not work.  Not only that, but typing them may well cause the shell to act strangely.  For example, on my development computer, typing `/rom//`, tapping the backspace key, then continuing with `hello` will cause STS to report that `/rom/hello` is not found, even though that apparently is the exact same command I had you type above.  This is more to do with the incompleteness of STS itself rather than my ambitions for the OS.  At some point in the future, after higher priority tasks are resolved, I will revisit the user interface and add more convenience features.
 
 ## Structure of a Command
 
 If you've used MS-DOS, Tripos, Unix, or other command-line environments before, you'll probably be reasonably familiar with the structure of a command in STS.  For those who might not be, this is how a command typically breaks down:
 
     /rom/m2   /rom/m2.slides
-   |_______| |______________|
+   \\_______/ \______________/
       |         |
       |         +-- Information to be passed to the command.
       |             These are called parameters, since they parameterize

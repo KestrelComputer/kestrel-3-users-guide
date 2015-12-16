@@ -85,7 +85,7 @@ NOTE: You'll notice a lack of more sophisticated editing commands.  E.g., CTRL-A
 If you've used MS-DOS, Tripos, Unix, or other command-line environments before, you'll probably be reasonably familiar with the structure of a command in STS.  For those who might not be, this is how a command typically breaks down:
 
     /rom/m2   /rom/m2.slides
-   \\_______/ \______________/
+    =======   ==============
       |         |
       |         +-- Information to be passed to the command.
       |             These are called parameters, since they parameterize

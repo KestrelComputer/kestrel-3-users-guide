@@ -6,7 +6,7 @@ While I cannot teach you all the tools and skills you'll need in a single, intro
 
 After reading this chapter, you should be able to:
 
-- Set up your Kestrel-3, either real hardware or its emulator.
+- Set up your Kestrel-3 emulator.
 
 
 ## Installing the Kestrel-3 Computer Hardware
@@ -17,7 +17,7 @@ At the time of this publication, the Kestrel-3 does not exist in physical hardwa
 
 The Kestrel-3 computer remains under development, and at the time of this writing, is not suitable for general purpose use.  However, if you're interested in contributing to the development of the Kestrel-3 software, particularly its emulator, development toolchain, or operating system, these instructions should be able to get you on your way to a working environment to play with.
 
-My development environments include MacOS X 10.10, Linux Mint, and Ubuntu Linux (64-bit).  Below, I describe how to configure a bare-bones Ubuntu 14.04 distribution to support elementary Kestrel-3 development, and should be sufficient to let you follow along with the examples in the remainder of this book.
+My development platforms include MacOS X El Capitan and Ubuntu Linux (64-bit).  Below, I describe how to configure a bare-bones Ubuntu 15.04 distribution to support elementary Kestrel-3 development, and should be sufficient to let you follow along with the examples in the remainder of this book.
 
 ### Installing Python
 
@@ -51,6 +51,14 @@ I find this helps keep my build descriptions focused and modular, albeit at the 
     ./redo
     sudo ./redo install
 
+### Installing GForth
+
+The Basic Systems Programming Language compiler is written in GForth, as it allows me to re-use much of GForth's run-time for the purposes of compiling a BSPL program.  If you don't already have GForth, you can install it like so:
+
+    sudo apt-get install gforth
+
+Please make sure you receive the 64-bit GForth environment.  BSPL will not work with a 32-bit or smaller Forth environment.
+
 ### Installing and Building the Kestrel Toolchain
 
 At last, we have what it takes to put everything together and build a Kestrel emulator along with its firmware.
@@ -65,13 +73,16 @@ You should now be able to invoke the emulator and see reasonable output:
 
     bin/e romfile roms/mlm
 
-This should bring you to the following prompt:
+This should bring you to the following prompt in your console:
 
     This is e, the Polaris 64-bit RISC-V architecture emulator.
-    Version 0.2.0.
+    Version 0.2.4.
     MLM/K3 V0.4
     BREAK AT           FFFFFFFFFFFF0208
     * _
 
+NOTE: As of this writing, a separate window will appear, but will not apparently be used.  This window is the Kestrel-3's emulated video display.  It provides a monochrome, 640x480 VGA display.  However, nothing in this chapter uses this display output yet.
+
 If this message, or a reasonable facsimile thereof, doesn't appear on your computer, something went wrong; try looking for error messages and fixing them, then try again.
 
+To exit from the emulator, simply press CTRL-C in the console window.

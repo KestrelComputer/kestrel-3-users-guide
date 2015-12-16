@@ -131,7 +131,8 @@ I reproduce the Kestrel-3 emulator's memory map below:
 
     Starting from       you'll find this    and ending here,
     ----------------    -----------------   ----------------
-    0000000000000000    RAM                 0000000000FFFFFF
+    0000000000000000    Program RAM         0000000000FEFFFF
+    0000000000FF0000    Video RAM           0000000000FFFFFF
     0100000000000000    Unused as of V0.2   0DFFFFFFFFFFFFFF
     0E00000000000000    Debugger Port       0E00000000000001
     0F00000000000000    Unused              0FFFFFFFFFFEFFFF
@@ -144,7 +145,8 @@ Contrast this against a proposed configuration for the Digilent Nexys2 version o
 
     Starting from       you'll find this    and ending here,
     ----------------    -----------------   ----------------
-    0000000000000000    RAM                 0000000000FFFFFF
+    0000000000000000    Program RAM         0000000000FEFFFF
+    0000000000FF0000    Video RAM           0000000000FFFFFF
     0100000000000000    Keyboard and Mouse  010000000000001F
     0200000000000000    Video Controller    02000000000000FF
     0300000000000000    SD Card, GPIO       030000000000000F
@@ -247,6 +249,7 @@ Depending on the version of the emulator you use, you might find you see warning
 
 Pro-tip: If you know you're wanting to store a number larger than a byte, then you can type the number naturally, provided it fits inside of 64 bits, and use as many commas as required to store the whole number.  For example, a 16-bit number could be written as `4948,,`, a 32-bit number as `DEADBEEF,,,,`, and so on.  Unfortunately, no corresponding method exists for reading memory out as 16-bit or larger quantities.
 
+Recall from the previous section that video RAM ranges from $FF0000 to $FFFFFF.  Try writing various numbers into this region and observe the effects on the video output window.  What sequence of numbers, and to which addresses, do you need to write to produce interesting shapes?
 
 ### CPU Registers
 
@@ -335,5 +338,4 @@ We should be able to inspect the registers at this point:
     * _
 
 If the result isn't $4444, something went wrong.  Double-check that the numbers you typed above for the program are correct and try again.  If it matches the result give here, congradulations!  You've just written your very first Kestrel-3 program!
-
 

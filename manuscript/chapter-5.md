@@ -432,7 +432,7 @@ Getver returns the (semantic-compatible) version number of the STS kernel.  This
         sd      filenameLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_LOADSEG(gp)
+        jalr    ra, STS_LOADSEG(x16)
         ld      errCode, 0(dsp)
         ld      segPtr, 8(dsp)
         addi    dsp, dsp, 16
@@ -457,7 +457,7 @@ Note further that `loadseg` does **not** execute the program.  You must arrange 
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_MOVMEM(gp)
+        jalr    ra, STS_MOVMEM(x16)
 
 Moves a block of memory from `srcBuf` to `dstBuf`.  The block moved will consist of `bufLen` bytes.  Currently, this procedure does not handle overlapping blocks of memory.  It implements a simple, slow, byte-granular, ascending memory move.  However, future releases of STS may improve on this procedure's implementation.
 
@@ -474,7 +474,7 @@ Moves a block of memory from `srcBuf` to `dstBuf`.  The block moved will consist
         sd      filenameLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_OPEN(gp)
+        jalr    ra, STS_OPEN(x16)
         ld      errCode, 0(dsp)
         ld      scb, 8(dsp)
         addi    dsp, dsp, 16
@@ -554,7 +554,7 @@ Seek attempts to set the read/write pointer for the stream at the indicated posi
         sb      character, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_SETMEM
+        jalr    ra, STS_SETMEM(x16)
 
 Setmem attempts to set a block of memory to an arbitrary byte value.  Every character, starting with the one at `dstBuf` and extending up to `dstBuf+bufLen-1` will be set to `character`.
 
@@ -571,7 +571,7 @@ Setmem attempts to set a block of memory to an arbitrary byte value.  Every char
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_STRDUP
+        jalr    ra, STS_STRDUP(x16)
 
 StrDup attempts to duplicate a string in memory.  The only way this can fail is if no memory is available for allocation.  In this case, a zero success code is returned, and the new string pointer will be undefined.  Otherwise, the success flag will be non-zero, and the new string pointer will contain a copy of the provided string.  STS guarantees that `newString` will be at least as long as `srcBuf`, but it *may* produce a larger buffer.
 
@@ -590,7 +590,7 @@ StrDup attempts to duplicate a string in memory.  The only way this can fail is 
         sd      bStringLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_STREQL
+        jalr    ra, STS_STREQL(x16)
         ld      yesNo, 0(dsp)
         addi    dsp, dsp, 8
 
@@ -609,7 +609,7 @@ StrEql compares two strings for equality.  If they match, byte for byte, true is
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_TYPE
+        jalr    ra, STS_TYPE(x16)
 
 Sends a complete string found at `srcBuf` and of length `bufLen` to the user's console.  Note that this bypasses the STS file I/O mechanism.
 
@@ -625,7 +625,7 @@ Sends a complete string found at `srcBuf` and of length `bufLen` to the user's c
         sd      seg, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_UNLOADSEG
+        jalr    ra, STS_UNLOADSEG(x16)
 
 Unloadseg will remove a program that was loaded via `loadseg` from memory.  Note that no reference checks are made; this procedure will remove the program unconditionally.  It is the caller's responsibility to ensure that nothing else in the running STS system references the program to be unloaded.
 
@@ -661,7 +661,7 @@ Write attempts to write the next sequence of bytes to the referenced stream.  If
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
         ld      x16, stsBase-L(gp)
-        jalr    ra, STS_ZERMEM
+        jalr    ra, STS_ZERMEM(x16)
 
 Zermem fills a region of memory starting at `dstBuf` and extending to `dstBuf+bufLen-1` with zeros.  This is a convenience API: it's equivalent to `dstBuf @ >d  bufLen @ >d  h# 00  setmem`.
 

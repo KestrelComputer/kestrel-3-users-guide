@@ -152,7 +152,7 @@ for it provides the program's only linkage with the operating system.
 Many applications might store the reference in a dedicated variable:
 
     ; ...
-    stsBase:    dword   0
+    g_stsBase:    dword   0
     ; ...
 
 then reference it when needed in another part of the program:
@@ -163,7 +163,7 @@ then reference it when needed in another part of the program:
                 addi    dsp, dsp, -16
                 sd      x17, 8(dsp)
                 sd      x16, 0(dsp)
-                ld      x16, stsBase-stsEmit(gp)
+                ld      x16, g_stsBase-stsEmit(gp)
                 jalr    x0, STS_EMIT(x16)
 
 Because the launched program
@@ -366,6 +366,24 @@ The program listing below illustrates the boilerplate needed by just about any S
 
 ## System Calls
 
+System calls are invoked with the `JALR` instruction.  A CPU register, typically `x16` but it doesn't always have to be, must point to the STS system call jump table.  This pointer is passed to the program on the launcher's data stack (see previous section).
+
+Depending on how far away the global variable used to store the STS jump table is from your system call site, you have one of two options to recover the jump table address.  If the variable is less than 2KiB away, you can use register-indirect addressing mode, like so:
+
+    L:  auipc   gp, 0               ; Load GP with address of L.
+        ld      x16, g_stsBase-L(gp); Load X16 with contents of g_stsBase.
+        jalr    ra, STS_GETVER(x16) ; Invoke system call.
+
+Otherwise, if your call site is farther away than 2KiB, you'll need to use the subroutine approach:
+
+        jal     ra, getGlobals
+        ld      x16, G_STSBASE(x15)
+        jalr    ra, STS_GETVER(x16) ; Invoke system call.
+
+If at all possible, opt for the former approach.  Although it takes the same amount of space in the main program flow of control, it's measurably faster, particularly on CPUs with deep pipelines.
+
+The sections which follow illustrate how to invoke the various STS system calls, and tries to explain what each performs.  Two examples are given: one in BSPL, and one in raw assembly language.  Note that the examples assume `g_stsBase` is within range for register-indirect addressing.
+
 ### close    
 
     \ BPSL
@@ -377,7 +395,7 @@ The program listing below illustrates the boilerplate needed by just about any S
         addi    dsp, dsp, -8
         sd      scb, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_CLOSE(x16)
 
 Close releases the resources acquired in the process of opening a file.  The SCB reference must be that which was returned by the corresponding `open` call.
@@ -393,7 +411,7 @@ Close releases the resources acquired in the process of opening a file.  The SCB
         addi    dsp, dsp, -8
         sb      character, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_EMIT(x16)
 
 Emit sends a single character to the user's display.  The cursor is moved along, as though typing the character on a teletype device.
@@ -409,7 +427,7 @@ Emit sends a single character to the user's display.  The cursor is moved along,
         addi    dsp, dsp, -8
         sd      scb, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_FILSIZ(x16)
         ld      size, 0(dsp)
         addi    dsp, dsp, 8
@@ -428,7 +446,7 @@ Filsiz returns the size of the open file, in bytes.  The current read/write posi
         sd      baseAddr, 8(dsp)
         sd      regionSize, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_FMTMEM(x16)
 
 fmtmem formats a memory pool with the required metadata to support allocation requests.  The `baseAddr` variable must point to the start of the
@@ -449,7 +467,7 @@ memory pool, while `regionSize` must contain its size, in bytes.  `fmtmem` does 
         addi    dsp, dsp, -8
         sd      allocatedMem, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_FREMEM(x16)
 
 Fremem releases a block of memory, whose pointer was returned by a previous call to `getmem`.
@@ -463,7 +481,7 @@ Fremem releases a block of memory, whose pointer was returned by a previous call
     ; Assembly Language
 
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_GETKEY(x16)
         lbu     character, 0(dsp)
         addi    dsp, dsp, 8
@@ -498,7 +516,7 @@ Example:
         addi    dsp, dsp, -8
         sd      blockSize, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_GETMEM(x16)
         lb      success, 0(dsp)
         ld      allocatedMem, 8(dsp)
@@ -515,7 +533,7 @@ Getmem allocates at least `blockSize` bytes of memory.  If successful, it return
     ; Assembly Language
 
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_GETVER(x16)
         ld      major, 0(dsp)
         ld      minor, 8(dsp)
@@ -536,7 +554,7 @@ Getver returns the (semantic-compatible) version number of the STS kernel.  This
         sd      filenameAdr, 8(dsp)
         sd      filenameLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_LOADSEG(x16)
         ld      errCode, 0(dsp)
         ld      segPtr, 8(dsp)
@@ -561,7 +579,7 @@ Note further that `loadseg` does **not** execute the program.  You must arrange 
         sd      dstBuf, 8(dsp)
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_MOVMEM(x16)
 
 Moves a block of memory from `srcBuf` to `dstBuf`.  The block moved will consist of `bufLen` bytes.  Currently, this procedure does not handle overlapping blocks of memory.  It implements a simple, slow, byte-granular, ascending memory move.  However, future releases of STS may improve on this procedure's implementation.
@@ -578,7 +596,7 @@ Moves a block of memory from `srcBuf` to `dstBuf`.  The block moved will consist
         sd      filenameAdr, 8(dsp)
         sd      filenameLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_OPEN(x16)
         ld      errCode, 0(dsp)
         ld      scb, 8(dsp)
@@ -597,7 +615,7 @@ The provided filename *must* be formatted to include both the volume and the fil
     ; Assembly Language
 
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_POLKEY(x16)
         lb      pending, 0(dsp)
         addi    dsp, dsp, 8
@@ -617,7 +635,7 @@ Polkey returns non-zero if `getkey` will *not* block.  Put another way, this pro
         sd      bufLen, 8(dsp)
         sd      scb, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_READ(x16)
         ld      errCode, 0(dsp)
         ld      actual, 8(dsp)
@@ -637,7 +655,7 @@ Read attempts to read the next sequence of bytes from the referenced stream.  If
         sd      position, 8(dsp)
         sd      scb, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_SEEK(x16)
         ld      errCode, 0(dsp)
         ld      oldPos, 8(dsp)
@@ -658,7 +676,7 @@ Seek attempts to set the read/write pointer for the stream at the indicated posi
         sd      bufLen, 8(dsp)
         sb      character, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_SETMEM(x16)
 
 Setmem attempts to set a block of memory to an arbitrary byte value.  Every character, starting with the one at `dstBuf` and extending up to `dstBuf+bufLen-1` will be set to `character`.
@@ -675,7 +693,7 @@ Setmem attempts to set a block of memory to an arbitrary byte value.  Every char
         sd      srcBuf, 8(dsp)
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_STRDUP(x16)
 
 StrDup attempts to duplicate a string in memory.  The only way this can fail is if no memory is available for allocation.  In this case, a zero success code is returned, and the new string pointer will be undefined.  Otherwise, the success flag will be non-zero, and the new string pointer will contain a copy of the provided string.  STS guarantees that `newString` will be at least as long as `srcBuf`, but it *may* produce a larger buffer.
@@ -694,7 +712,7 @@ StrDup attempts to duplicate a string in memory.  The only way this can fail is 
         sd      bStringPtr, 8(dsp)
         sd      bStringLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_STREQL(x16)
         ld      yesNo, 0(dsp)
         addi    dsp, dsp, 8
@@ -713,7 +731,7 @@ StrEql compares two strings for equality.  If they match, byte for byte, true is
         sd      srcBuf, 8(dsp)
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_TYPE(x16)
 
 Sends a complete string found at `srcBuf` and of length `bufLen` to the user's console.  Note that this bypasses the STS file I/O mechanism.
@@ -729,7 +747,7 @@ Sends a complete string found at `srcBuf` and of length `bufLen` to the user's c
         addi    dsp, dsp, -8
         sd      seg, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_UNLOADSEG(x16)
 
 Unloadseg will remove a program that was loaded via `loadseg` from memory.  Note that no reference checks are made; this procedure will remove the program unconditionally.  It is the caller's responsibility to ensure that nothing else in the running STS system references the program to be unloaded.
@@ -747,7 +765,7 @@ Unloadseg will remove a program that was loaded via `loadseg` from memory.  Note
         sd      bufLen, 8(dsp)
         sd      scb, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_READ(x16)
         ld      errCode, 0(dsp)
         ld      actual, 8(dsp)
@@ -765,7 +783,7 @@ Write attempts to write the next sequence of bytes to the referenced stream.  If
         sd      dstBuf, 8(dsp)
         sd      bufLen, 0(dsp)
     L:  auipc   gp, 0
-        ld      x16, stsBase-L(gp)
+        ld      x16, g_stsBase-L(gp)
         jalr    ra, STS_ZERMEM(x16)
 
 Zermem fills a region of memory starting at `dstBuf` and extending to `dstBuf+bufLen-1` with zeros.  This is a convenience API: it's equivalent to `dstBuf @ >d  bufLen @ >d  h# 00  setmem`.

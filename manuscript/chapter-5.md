@@ -70,13 +70,15 @@ When a program is launched under STS, the registers are set
 as follows, according to the ABI established by the current
 BSPL compiler.
 
-        PC              Base address of the header, plus 8.
-        X1              Return Address to whatever launched your program
-        X2              Data Stack Pointer
-        X3              Return Stack Pointer
-        X4              Global Variables Pointer
-        X5..X15         Undefined; best not to use them without saving first.
-        X16..X31        Undefined; these needn't be saved.
+|Register|Purpose|
+|:------:|:------|
+|PC|Base address of the header, plus 8.|
+|X1|Return Address to whatever launched your program|
+|X2|Data Stack Pointer|
+|X3|Return Stack Pointer|
+|X4|Global Variables Pointer|
+|X5..X15|Undefined; best not to use them without saving first.|
+|X16..X31|Undefined; these needn't be saved.|
 
 ### PC
 

@@ -1,4 +1,4 @@
-# STS System Call Reference
+# STS Application Binary Interface
 
 NOTE: As of this writing, STS remains incomplete.  However, sufficient amounts of code exists to give you a crude flavor of what STS will be like in the future.  This chapter discusses STS V1.5 as of the time this chapter was published to LeanPub.
 

@@ -111,8 +111,8 @@ to productively use the STS operating system services.
 
 Note that the size of the caller's data stack isn't known
 by the called program.
-The caller MUST arrange at least 64 bytes for the called program's use.
-If more than 64 bytes will be needed,
+The caller MUST arrange at least 1024 bytes for the called program's use.
+If more than 1024 bytes will be needed,
 it's in the program's best interest
 to allocate its own data stack.
 
@@ -122,7 +122,7 @@ X2 will need to be restored with this initial value.
 
 ### Data Stack Contents
 
-The calling program MUST place some parameters on the data stack.
+The launching program MUST place some parameters on the data stack.
 This information provides the called application
 with the system-level linkage it needs to
 follow the user's specific instructions through command parameterization,
@@ -147,11 +147,35 @@ prefixed with `STS_`, and rendered in all upper-case letters.
 For example, the offset for `getmem` is written `STS_GETMEM`.
 The system call reference follows later in this chapter.
 
-The calling program **may** provide its own implementation
+Programs are expected to preserve this reference,
+for it provides the program's only linkage with the operating system.
+Many applications might store the reference in a dedicated variable:
+
+    ; ...
+    stsBase:    dword   0
+    ; ...
+
+then reference it when needed in another part of the program:
+
+    ; Invoke the emit system call.  Assume parameters
+    ; are passed in CPU registers.
+    stsEmit:    auipc   gp, 0
+                addi    dsp, dsp, -16
+                sd      x17, 8(dsp)
+                sd      x16, 0(dsp)
+                ld      x16, stsBase-stsEmit(gp)
+                jalr    x0, STS_EMIT(x16)
+
+Because the launched program
+receives its linkage to STS
+via the data stack,
+as established by the launching program,
+the launching program **may** provide its own implementation
 of the STS system calls.
-The called program can never trust the jump table address it receives
+The launched program can never truly know the system call table it receives
 to be the one that the STS kernel itself provides.
-However, it *can* trust that it offers completely compatible semantics.
+However, it *can* trust that what it receives remains compatible
+with the semantics established by STS.
 This allows some programs to encapsulate STS features for other programs.
 
 For example, a trace utility can launch another STS program,
@@ -206,7 +230,7 @@ with no intervening prints, will print the command exactly as typed.
 
 Although STS does not interpret command names, tails, or results,
 standards surrounding their use is encouraged.
-If any such standards exist, they will be documented in separately.
+If any such standards exist, they will be documented separately.
 
 ### Return Stack Pointer (X3)
 The X3 register will point
@@ -215,8 +239,8 @@ The caller is typically, but need not be, STS V1.5 itself.
 
 Note that the size of the caller's return stack isn't known
 by the called program.
-The caller MUST arrange at least 64 bytes for the called program's use.
-If more than 64 bytes will be needed,
+The caller MUST arrange at least 1024 bytes for the called program's use.
+If more than 1024 bytes will be needed,
 it's in the program's best interest
 to allocate its own return stack.
 
@@ -260,6 +284,85 @@ Unlike X5 through X15, though,
 convention dictates that any control flow
 invalidates the contents of these registers
 (unless you or your compiler can statically determine their stability).
+
+### Minimal Program Setup
+
+The program listing below illustrates the boilerplate needed by just about any STS-compatible program.  The software hands off control from the launcher to the launched in a way that allows the launched program to return to the launcher at any time by jumping to `_exit`.  As you can see, the required code is small.
+
+            ; This provides the required header so that loadseg sees this
+            ; file as a valid program.
+
+            jalr    x0, 0(x1)
+            word    0
+
+            ; This is where STS, a shell, or other program
+            ; will transfer control.  Save our environment so
+            ; we can exit back to the launcher later.
+
+    _entry: addi    rsp, rsp, -8    ; Save the launcher's return address.
+            sd      ra, 0(rsp)
+
+            ; At this point, we need to save our launcher state,
+            ; so that we can return to the launcher later.
+
+            jal     ra, getGlobals
+            sd      dsp, G_DSP(x15)
+            sd      rsp, G_RSP(x15)
+            sd      gvp, G_GVP(x15)
+
+            ; Since we have a pointer to DSP cached, we can always
+            ; recover our link to STS, directly or indirectly.
+            ; However, reloading X15, then DSP, then the STS jump table
+            ; pointer is a three step process; if we just cache the
+            ; pointer in its own variable, we can save ourselves a step.
+
+            ld      x16, 0(dsp)
+            sd      x16, G_STSBASE(x15)
+
+            ; We can now kick off our desired program safely,
+            ; whatever that may be.  You may want to take the opportunity
+            ; to invoke STS_GETMEM system call to allocate custom data and
+            ; return stacks, and a fresh global variable space.
+
+            jal     x0, _start
+
+            ; After our program terminates, or if an error causes it
+            ; to prematurely end, control transfers to _exit.
+            ; We cannot trust our stack pointers, since we could be here
+            ; as a result of an error, or they may have been freed upon
+            ; exit.  So, we must restore the launcher's state.  We also
+            ; assume the return code has already been set.
+    _exit:  
+            jal     ra, getGlobals
+            ld      dsp, G_DSP(x15)
+            ld      rsp, G_RSP(x15)
+            ld      gvp, G_GVP(x15)
+
+            ld      ra, 0(rsp)      ; Jump back to the launcher.
+            addi    rsp, rsp, 8
+            jalr    x0, 0(ra)
+            
+            ; Because STS V1.5 doesn't yet support relocations for RISC-V
+            ; programs, we must refer to our global data using PC-relative
+            ; mechanisms.  In this case, we simply "return" to our caller
+            ; with X15 pointing to our global data.
+
+            align   8
+            addi    x0, x0, 0       ; Maintain 64-bit alignment.
+    getGlobals:
+            jalr    x15, 0(ra)      ; "Return address" X15 points to globals.
+
+    g_dsp:          dword   0
+    g_rsp:          dword   0
+    g_gvp:          dword   0
+    g_stsBase:      dword   0
+
+                    ; additional global data may follow as needed.
+
+    G_DSP       = g_dsp - g_dsp
+    G_RSP       = g_rsp - g_dsp
+    G_GVP       = g_gvp - g_dsp
+    G_STSBASE   = g_stsBase - g_dsp
 
 ## System Calls
 

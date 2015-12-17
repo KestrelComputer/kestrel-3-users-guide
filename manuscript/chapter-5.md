@@ -411,7 +411,7 @@ Zermem fills a region of memory starting at `dstBuf` and extending to `dstBuf+bu
 
 ## System Call Compatibility Matrix
 
-The following list of STS system calls covers everything from version 1.0 through to 1.5.  It's primarily of interest to people who studied earlier STS implementations and wish to compare Kestrel-2 versus Kestrel-3 runtime environments.
+For those curious of the history of the STS ABI and API, the following compatibility matrix illustrates the evolution over time.  It covers everything from version 1.0 through to 1.5, the latest release as of this publication.  It's primarily of interest to people who studied earlier STS implementations and wish to compare Kestrel-2 versus Kestrel-3 runtime environments.
 
 |System Call|1.0|1.1|1.2|1.5|
 |:---------:|:-:|:-:|:-:|:-:|

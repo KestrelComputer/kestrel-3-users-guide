@@ -70,11 +70,17 @@ All that typing is getting laborious though, so let's tell Forth to remember wha
 
     : row ( a - a' )  -1 OVER H!  80 + ;
 
+The `:` symbol tells Forth that we're interested in creating a new word.  The name of the word follows immediately; in this case `row`, for row-of-pixels.
+
+The stuff between the parentheses is a *comment*; its purpose is to inform the programmer of some relevant information about the word; it has zero effect on the meaning of the Forth program itself.  In this case, we're illustrating a "stack effect diagram," or more simply, "stack effect."  This is saying, in a symbolic way, that we're accepting an **a**ddress, and returning another **a**ddress**'** which (for our purposes) is greater than **a**.  We know that `a'` must be larger than `a` because of the *context* in which `row` executes (that of drawing something to the screen).  We'll talk more about stack effects in a later chapter; for now, though, just keep typing and learning.
+
+The `OVER` word tells Forth to take the value "over" the immediate top of stack.  So if we have a stack with the values `1 2 3` and we invoke `OVER` on this, we would expect to see `1 2 3 2` as the result.  So in our case above, `OVER` is what allows us to reuse the address provided as input.
+
+`;` tells the compiler when to *stop* the compilation, and identifies the official end of the definition.
+
 So now, you should be able to just type `row` several times and get the same effect.
 
-**Aside:** The stuff between the parentheses is a *comment*; its purpose is to inform the programmer of some relevant information about the word; it has zero effect on the meaning of the Forth program itself.  In this case, we're illustrating a "stack effect diagram," or more simply, "stack effect."  This is saying, in a symbolic way, that we're accepting an **a**ddress, and returning another **a**ddress**'** which (for our purposes) is greater than **a**.  We know that `a'` must be larger than `a` because of the *context* in which `row` executes (that of drawing something to the screen).  We'll talk more about stack effects in a later chapter; for now, though, just keep typing and learning.
-
-So, now that we're happy that we can draw individual rows of pixels on the screen, let's bundle this into a word that draws a properly proportioned rectangle on the screen, and test it.  Note we have to use `AT-XY` to place the cursor underneath where we expect the rectangle to go, so the `ok` prompt doesn't overwrite what we just drew.
+When we've convinced ourselves that we can draw individual rows of pixels on the screen, let's bundle this into yet another word that draws a properly proportioned rectangle on the screen, and test it.  Note how we use `PAGE` to clear the screen; it also means we have to use `AT-XY` to place the cursor underneath where we expect the rectangle to go, so the `ok` prompt doesn't overwrite what we just drew.
 
     : on ( - ) $FF0000 15 FOR row NEXT DROP ; 
     PAGE 0 4 AT-XY

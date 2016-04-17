@@ -80,6 +80,6 @@ This should bring you to the following prompt in your console:
 
 ![Initial screen after powering your Kestrel-3.](images/ch1.bootscreen.png)
 
-If this message, or a reasonable facsimile thereof, doesn't appear on your computer, something went wrong; try looking for error messages and fixing them, then try again.  If you need further assistance, feel free to open a Github issue at https://github.com/kestrelcomputer/kestrel .
+If this message, or a reasonable facsimile thereof, doesn't appear on your computer, something went wrong; try looking for error messages and fixing them, then try again.  If you need further assistance, feel free to open a Github issue at https://github.com/kestrelcomputer/kestrel/issues .
 
 To exit from the emulator, simply close the emulated monitor window.

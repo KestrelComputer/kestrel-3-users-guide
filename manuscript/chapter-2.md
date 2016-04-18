@@ -139,13 +139,15 @@ But, how do we get the vertical strip?  We only need the top-most bit of the 16-
 
     $8000 $FF0050 H!
 
-Whoops, that's not right.  If we were to continue with this, we'd end up with something that looks like a giant T.  The reason this happens is because the microprocessor in the Kestrel-3 is a *little-endian* processor, while the video circuitry expects data to be stored in *big-endian* format.  For this reason, we need to swap the upper and lower halves of the word we want to store.  You can confirm this following code words:
+Whoops, that's not right.  If we were to continue with this, we'd end up with something that looks like a giant T.  The reason this happens is because the microprocessor in the Kestrel-3 is a *little-endian* processor, while the video circuitry expects data to be stored in *big-endian* format[^mgia_history].  For this reason, we need to swap the upper and lower halves of the word we want to store.  You can confirm this following code words:
 
     $0080 $FF0050 H!
     $0080 $FF00A0 H!
 
 You should start to see the top-most portion of the rectangle's edges start to appear in the upper left-hand corner of the screen.
 
+[^mgia_history]: The Monochrome Graphics Interface Adapter, or MGIA, core is responsible for taking data from memory and sending it to your monitor.  I originally developed it for the Kestrel-2, which originally was going to use a *word-addressed* processor.  Later in its evolution, it became more advantageous to switch the processor to use bytes as its smallest addressible unit; however, the MGIA remained word-addressed.  The Kestrel-3 inherits the Kestrel-2's MGIA (in the upgraded form of the MGIA-II) core, complete with its word-based addressing.  Fear not, however; the successor to the MGIA-II core will let you adjust its endianness, making writing software for it significantly less burdensome.
+ 
 So, our black fat-bit consists of a row of pixels, followed by a 15-tall column of pixels.  Let's incorporate that definition into our program so far:
 
     110 LIST
@@ -159,4 +161,37 @@ So, our black fat-bit consists of a row of pixels, followed by a 15-tall column 
 You should see something like the following:
 
 ![Drawing a black fat-bit.](images/ch2.fatbit.black.png)
+
+### Rows of Fat Bits
+
+At this point, we have a means of drawing a single white or black fat bit in the upper left-hand corner of the display.  But, what we'd really like is to draw a complete matrix of them.  A matrix is an array of arrays, of course, so it seems logical that our next step is to simply get an array of fat bits up on the screen first.
+
+I need a plan to go about doing this.  I won't go into the different approaches I've considered here; this chapter is already quite long as it is.  Instead, I'll just invoke the power of successive refinement and iterative programming.
+
+For the moment, let's pretend we have a version of `on` and `off` which renders a white or black fat-bit where we tell it.  That is, instead of hardcoding `$FF0000` as the frame buffer memory address, we accept this value from the stack.  It would be very convenient if we can invoke a sequence like, `on off on off`, to just render fat-bits horizontally.  Since `on` and `off` would accept an address from the stack, it follows that they *must* also leave an address on the stack as well.
+
+In other words, we need `on` and `off` to have the following stack effects:
+
+    : on ( a - a' ) ...
+    : off ( a - a' ) ...
+
+But what is `a'` in this case?  Since a byte holds 8 pixels, and our fat-bits are 16-pixels wide, it follows then that `a' = a + 2`.  Provided we don't do this more than 40 times in a row, we should be able to draw a horizontal strip of fat-bits.
+
+The simplest way to achieve this is to change our existing definitions like so:
+
+    110 LIST
+    4 SET : on ( a - a') DUP 15 FOR row NEXT DROP 2 + ;
+    5 SET : off ( a - a') DUP row 14 FOR col NEXT DROP 2 + ;
+    110 LIST  ( to make sure our changes took )
+    FLUSH
+
+Now, we need to test them to make sure our assumptions hold.
+
+    BYE
+    100 LOAD
+    $FF0000 on off on off HEX U. DECIMAL
+
+You should see something like the following:
+
+![An array of fat-bits.](images/ch2.fatbit.array.png)
 

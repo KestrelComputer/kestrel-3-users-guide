@@ -229,14 +229,14 @@ Whoa, hold up!  I'm redefining `row` on line 9.  How is this supposed to work?  
 
 **This is why you hear the word *context* so frequently in Forth programming.**  It's clear that, by the time line 9 rolls around, the *context* for what a row of pixels *means* has changed.  We simply make this known to Forth in the most natural way possible; we simply *redefine* it as we need it, *when* we need it.
 
-Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by various flavors of Lisp, if you were to change the meaning of `row` like this:
+Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by various flavors of Lisp, if you were to change the meaning of `row` like this (in some made-up dialect of Lisp):
 
     (define (row ...) ...definition 1...)
     (define (on addr) (times 16 (let (addr (row addr)))))
     ... some more code here ...
     (define (row ...) ...definition 2...)
 
-then the meaning of `on` would fundamentally change.  Were you to do this in a more statically controlled language like C, you'll just get a compile-time error for duplicately defined symbols.
+then the meaning of `(on x)` would fundamentally change.  Were you to do this in a more statically controlled language like C, you'll just get a compile-time error for duplicately defined symbols.
 
 Anyway, we can prove that this works easily enough:
 
@@ -259,7 +259,7 @@ We can test this simply enough by copying the bytes from [the glyph for A](#ch2_
     PAGE 0 17 AT-XY
     bm $FF0000 matrix
 
-![Whoops!  I forgot to swap bytes due to MGIA endian differences from the CPU.](images/ch2.upsidedown.A.png)
+![MGIA endian differences strikes again!](images/ch2.upsidedown.A.png)
 
 Whoops; I forgot to swap the bytes due to the MGIA's big-endian accesses to memory.  Even so, I think we've adequately proven that `matrix` works as intended.  Let's commit it to block storage now.
 

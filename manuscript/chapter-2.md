@@ -1,341 +1,287 @@
-# The Machine Language Monitor
+# Getting to Know Forth
 
-The Machine Language Monitor, or MLM, serves as a software equivalent to a computer's "front panel".  It lets you inspect and alter memory, allowing you to write programs for the computer using the computer itself.  It also lets you inspect and alter the microprocessor's available registers, which is often required when trying to solve problems with erroneously entered software (a process known as *debugging*).
+In this chapter, you'll have an understanding of how one typically writes software in Forth for the Kestrel-3, *on* the Kestrel-3.  This chapter is not directly intended to teach you how to program the Kestrel-3; rather, it's an illustration of what it's like to write software in a native Forth environment.  Unlike most programming tutorials, I'm just going to dive right into a non-trivial application: a simple font editor that you can use to make custom character sets.
 
-The MLM is a very low-level interface to the computer; literally, just one step above actually flipping physical switches to operate the computer.  While operating systems and other kinds of system software exist at some level to abstract the computer away from the user, the MLM fully exposes the critical features of the computer instead.  It truly is the simplest possible system software that succeeds in letting the user manage and operate the computer.
+It's not terribly complicated as applications go; but, it will touch many of the facilities of the Kestrel-3 on different levels of abstraction, and will introduce everything from the most basic to some moderately advanced Forth programming idioms that you might not have thought possible from reading other chapters of this book.
 
-The MLM that comes with the Kestrel-3 exposes the following resources to the user:
+The program is presented in a manner that allows you to type in the program step by step and to follow along.  It's perfectly OK if you don't get things the first time around; feel free to revisit this chapter again later.  As always, if you have questions which I'm not answering, or if you feel this chapter can be improved, feel free to open a Github issue at [https://github.com/kestrelcomputer/kestrel/issues](https://github.com/kestrelcomputer/kestrel/issues).
 
-- Two kinds of memory: so-called RAM and ROM.
-- CPU Registers.
+If you intend on following along, it's best if you insert a *blank* SD card into the Kestrel-3's SD card slot.  This way, you won't have to worry about following the instructions and risking ruining data on an existing SD card.  If you're running the emulator, you can "insert" a card simply by creating a file named `sdcard.sdc` in the same directory that you're running the emulator from.  On Ubuntu Linux, you can do this with the command `touch sdcard.sdc` *before* launching the emulator, like so:
 
-The following sections explain what these resources are and how best to understand them.
+    rm -f sdcard.sdc
+    dd if=/dev/zero of=sdcard.sdc bs=1024 count=200
+    bin/e romfile roms/forth
 
-After reading this chapter, you should be able to:
+## Block Storage
 
-- Understand what computer memory is, and how it's roughly organized in the Kestrel-3.
+You may be familiar with other programming environments in older home computers, such as their many dialects of BASIC, or you may be familiar with programming on today's enterprise-quality environments, using languages as sophisticated as C#, C++, Java, etc.  The one thing these languages all have in common is the concept of the *file*, an arbitrarily long sequence of secondary storage in which you store a program.
 
-- Understand the difference between bits, nybbles, bytes, half-words, words, and double-words.
+In these environments, you tend to enter your program using some kind of *editor*, typically as one or more modules, which you then save with a single action (e.g., selecting **Save** from a menu, or typing `SAVE "MY PROGRAM",8` or the like).  Today, even many dialects of Forth prefer this style of programming, since it lets the compiler take advantage of the tooling and filing systems available to the host operating system.
 
-- Understand some of the differences between a real, hardware Kestrel-3 and the standard Kestrel-3 emulator.
+Since the Kestrel-3 currently lacks a file-capable operating system in its system ROM[^define_rom], an alternative method of storing Forth applications is required.  We do this using something called *block storage*.  Blocks are also known as *screens*, particularly when used to store Forth programs.
 
-- Understand how to use the Kestrel-3's Machine Language Monitor to enter and run programs.
+[^define_rom]: Read-Only Memory.  This is the kind of memory which the Kestrel-3 can rely on retaining its contents even when power is disconnected from the computer.
 
-What this chapter will *not* cover is how to translate RISC-V instructions into the numbers you'd use to plug into the MLM.  By its nature, learning how to write machine language programs requires longer exposition and more detailed explanations.  Therefore, I'll defer this topic for another chapter.
+A single block stores exactly 1024 bytes, or 1 *kilobyte* of memory (in our case, to the mounted SD card).  They are identified by number, from 1 to however many may fit on your particular SD card.  The programmer typically maintains an awareness of which ranges of blocks are used by which programs or which data files.
 
-## Memory
+I'm going to assume you have a fresh SD card inserted into the slot, or an empty `sdcard.sdc` file created for the Kestrel-3 emulator to work with.  To prepare to work on our font editor, let's type the following commands:
 
-Computer memory consists of lots of tiny cells, which are called *bits*.  Each bit can hold one of two values: 0 or 1.  Think of a bit as a square on a chess board.  It either holds a piece (1) or it doesn't (0).
+    100 CLEAN
+    100 LIST
 
-A bit can be valuable for telling a program whether or not something has happened, or if something exists or not.  Much beyond that, however, individual bits don't hold a lot of valuable information.  It's only when we use collections of them that we may begin to encode more useful, richer kinds of information.
+You should see Forth respond with `ok` after it finishes each command.  The first command tells Forth to reset block 100 to all spaces, preparing it to contain Forth source code.  The second lists the block just to make sure it has been cleared.  Your screen should look like this:
 
-Unlike a chess board, however, a computer's memory is laid out sequentially, like so:
+![Preparing for your first screen of source code.](images/ch2.100clean.png)
 
-    0100100001001001 ... etc
+Let's provide this block with a title (useful for when we run `INDEX`, which I'll explain later), and a command to load another block.  Do not worry about how I chose this other block; honestly, it's arbitrary.  It also, at this point at least, doesn't matter that we haven't provided any source code for this other block yet, because we'll just `CLEAN` it later first.
 
-As you can see from the example above, a bunch of 0s and 1s put together doesn't really convey much value on its own.  You and the computer both need some meaningful way of identifying where useful information begins and ends.
+    0 SET ( Chapter 2 Font Editor   saf2 2016apr17 )
+    2 SET MARKER empty
+    3 SET 110 LOAD
 
-### Introducing Bytes, Nybbles, and Hexadecimal Numbers
+Now, if you type `100 LIST` again, you should see the program you entered so far.
 
-This is where the notion of a *byte* comes in.  Instead of inventing some ultra-clever way for a computer to say, "OK, here's where the start of my information begins," we arbitrarily *declare* that useful information will be *structured* in groups of, say, eight bits.  (To be fair, this ultra-clever technology *does* exist; however, it's mostly used for telecommunications and not for online processing of data.)
+## Zooming In on a Glyph
 
-If we take a look at our previous example above, except grouping them into bytes, we still cannot divine much information about the blob of data, but we *can* see an inkling of a pattern emerging.
+A font is, in its most basic form, a collection of glyphs.  Each glyph describes how the character it represents appears to the human viewer.  The Kestrel's system font consists of 256 fixed, eight-pixel by eight-pixel matrices of on or off bits.
 
-    01001000 01001001 ... etc
+You might have heard the term "byte" before, but never really understood what it meant on a concrete level.  A byte is simply eight bits.  A bit, then, is an on/off value, stored in numerical form as either a 1 or a 0.  This combination of bits allows us to represent numbers, text, etc.  The interpretation, really, is entirely context dependent.  This is important to us because of how we exploit this fact to render text on the screen.  Below, you'll find a blown-up example of what I mean.  It's the letter A itself, represented both in terms of on/off pixels, and the corresponding hexadecimal and decimal representation.
 
-Indeed, we can separate the data down further, into groups of 4 bits, like so:
+{id="ch2_img_glyphA"}
+![The glyph for the letter A.](images/ch2.glyphA.png)
 
-    0100 1000 0100 1001 ... etc
+What we want our font editor to do, ultimately, is render a character in "fat bits", approximating the graph on the left-hand side above, where it's easier for us to see and later manipulate.  We don't really care about the corresponding hexadecimal or even their decimal values.  That's something for the computer to worry about.
 
-As it happens, working with 4-bit quantities like this, each one called a *nybble* by the way, proves especially convenient for human beings, but not necessarily as 1s and 0.  Instead, we assign a number or letter to each of these groupings, according to the table below.
+### White Fat Bits
 
-    What's really       How we write it
-    in the computer     for convenience
-        0000                    0
-        0001                    1
-        0010                    2
-        0011                    3
-        0100                    4
-        0101                    5
-        0110                    6
-        0111                    7
-        1000                    8
-        1001                    9
-        1010                    A
-        1011                    B
-        1100                    C
-        1101                    D
-        1110                    E
-        1111                    F
+The most fundamental thing we have is "the bit."  It's either on (1) or off (0).  On bits render as white on the screen, so we're going to recreate that in the fat-bits magnification as well.  So, let's write a simple program to render a bit that is "on".  I'm going to zoom in by a factor of 16; meaning, each pixel in a character will now occupy a 16 pixel rectangle on the screen.  Since rectangles aren't fundamental objects, let's break this down even further.
 
-*Note:* There is a reason behind this ordering, and it has to do with something called base-2 arithmetic.  I'll just skip the explanation of what this means for now.  You *will* eventually need to learn it in order to write software for *any* computer, and the Kestrel-3 is no different; however, we can cross that bridge when it's actually important to have that knowledge.
+Our rectangle will consist of 16 rows of 16 pixels.  As it happens, Kestrel Forth has a word `H!` which lets us set 16-bits of memory at a time (*half-word store*, in case you were wondering what `H!` stood for).  So, storing a number with all bits turned on into the video frame buffer should yield a small white line in the upper left-hand corner of the screen:
 
-Going back to our previous example, then, we can write each nybble more conveniently and compactly by replacing each group of four bits with its equivalent symbol from the table above:
+    -1 $FF0000 H!
 
-    4 8 4 9 ... etc
+After demonstrating our intuition is correct, we next want a program to repeat the above simple program enough times to draw a solid rectangle, without having to manually specify addresses everywhere.  Let's just specify the address once:
 
-Each of these digits is called a *hex digit*, short for *hexadecimal* digit, or base-16 digit.  That's a big word that basically says your digits use a set of 16 possible symbols, instead of our usual set of 10 (what is known as base-10, or just decimal).
+    PAGE
+    $FF0000
 
-You should by now understand an important insight at this point in time: computers don't care what the bits represent.  Human beings do.  All computers do is manipulate those bits in ways *we*, as people, think will be useful.  Back in the 1980s when I first started learning this stuff, there was an initialism in common use called GIGO, short for Garbage In, Garbage Out.  It's a nice sound-bite, but it doesn't fully emphasize the importance that humans have on the *context* required to interpret the information you see above.  Is it an address?  Is it text?  Is it weather-related?  We can't tell by looking at the blob of data, no matter how it's represented to the reader.  Only when the reader has enough context can he or she make sense of those numbers.
+and see if we can use the computer itself to remember the address for us.  While we're at it, let's make sure the computer in fact *does* remember our address after we're done:
 
-Until now, I haven't given you the context for this data.  However, let's do that now.  Suppose we have some a priori knowledge that tells us we're looking at *text*.  If we know that this represents text, probability is good that you're looking at something compatible with ASCII information.  We can use an ASCII chart (see appendix) to decode what each byte means.  
+    -1 OVER H! .S
 
-Let's go back to looking at the data as a set of bytes, but this time keeping the hexadecimal form:
+Why `OVER`?  Because our address was placed on the Forth data stack first, and the value we want to write is underneath it, we need to "reach over" to access the address again for `H!` to work correctly.  The `.S` word will print to the display the current data stack contents without actually clearing the stack.
 
-    48 49 ... etc
+After proving this does the same thing, we have a number left on the stack -- that's our memory address.  We just need to increment it to the next row of pixels on the screen.  With the Kestrel-3 running at 640x480 resolution with only 2 colors on the screen (black and white), it turns out that each row of pixels corresponds to 80 bytes.  You can figure this out yourself by simply dividing the resolution by the number of pixels stored in a byte (640 / 8 = 80).  So, we use that figure to increment our address:
 
-As it turns out by reading the ASCII chart, these two bytes form the letters H and I, in that order.
+    -1 OVER H!  80 +  .S
 
-Hi!
+The first time you type the above line, nothing will apparently have happened.  However, as you type that line several times in a row, you should be able to confirm that it actually works as intended.  A slim white rectangle will start to grow downwards in the upper-lefthand corner of the screen.
 
-The act of reading bytes and interpreting them is what programmers call *reading a memory dump* (sometimes also referred to as a "core dump", largely for historical reasons), where you combine raw hexadecimal numbers written to your display with your contextual knowledge to make sense of what the computer's trying to tell you its memory contains.
+All that typing is getting laborious though, so let's tell Forth to remember what we mean whenever we say, just to pick an arbitrary name, *row*:
 
-But, what about larger numbers than eight bits?  There's no fundamental reason why we couldn't use 16-, 24-, 32-, or even larger numbers.  In fact, some sizes occur so frequently that we assign them names.  A *word* is defined to be 32-bits on any RISC-V compatible processor, in part because that's how big a RISC-V instruction happens to be.  However, it's equally adept at working with 16-bit quantities (*half-words*), and with 64-bit quantities (*double-words*).  We'll often use abbreviations: hwords, words, and dwords, respectively.  So, for example, since a memory address is expressed with 16 nybbles (64 bits), we can fit that address into a dword-sized region of memory.
+    : row ( a - a' )  -1 OVER H!  80 + ;
 
-Hopefully, you know what bits, nybbles, bytes, and the various kinds of words are.  Next, you'll need to know the two different kinds of memory that the Kestrel-3 exposes to a programmer.  This is important because if you attempt to store a program into the wrong kind of memory, you'll be unpleasantly disappointed with the results.
+There are some more language elements to discuss here.  The `:` symbol tells Forth that we're interested in creating a new word.  The name of the word follows immediately; in this case `row`, as in row of pixels.
 
+The stuff between the parentheses is a *comment*; its purpose is to inform the programmer of some relevant information about the word; it has zero effect on the meaning of the Forth program itself.  In this case, we're illustrating a "stack effect diagram," or more simply, "stack effect."  This is saying to whoever is reading the code, in a symbolic way, that we're accepting an address `a`, and returning another address `a'`.  It's not stated in this comment that `a' > a` or that `a' = a+80`, because it's obvious from context what the result should be.  Reading the line of source, we see that `a'` should be larger than `a` by 80.  Another reason who know this must be true is because of the context in which we intend on using `row`, namely to affect graphics on the screen.  We'll talk more about stack effects elsewhere.
 
-### RAM and ROM
+`;` tells the compiler when to *stop* the compilation, and identifies the official end of the definition.
 
-Before learning how to interact with the MLM, you need to know about the resources it gives you access to.  The Kestrel-3 contains many different kinds of memories; however, only two are of concern to us right now: RAM and ROM.
+So now, you should be able to just type `row` several times and get the same effect.
 
-RAM is an acronym standing for Random-Access Memory.  It holds both the instructions and the data needed to implement a computer program, or it can serve as a temporary storage depot for other kinds of data that a program works with.  For example, the description of what you see on a video display will be stored in RAM.
+When we've convinced ourselves that we can draw individual rows of pixels on the screen, let's bundle this into yet another word that draws a properly proportioned rectangle on the screen, and test it.  Note how we use `PAGE` to clear the screen; it also means we have to use `AT-XY` to place the cursor underneath where we expect the rectangle to go, so the `ok` prompt doesn't overwrite what we just drew.
 
-ROM is an acronym standing for Read-Only Memory.  It also holds both the instructions and the data needed to implement a computer program.  However, if I may be permitted to over-generalize here, it differs from RAM in that its contents remain fixed; it cannot change, even when the power is turned off.  For this reason, we store a computer's system software in ROM, so that it's there when we turn the power to the computer on.
+    : on ( - ) $FF0000 15 FOR row NEXT DROP ; 
+    PAGE 0 4 AT-XY
+    on
 
-RAM differs from ROM in that you can alter its contents; but, of course, it loses its contents completely when power is turned off.  Also, its name is an historical accident, for ROM also supports random access.
+Why only `15` in the program?  That's because `FOR` counts down towards, and including, zero.  If you were to count the numbers out sequentially, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, and 0, you'll notice that there are in fact *16* numbers present.
 
+You should see a big white rectangle in the upper-lefthand corner of the screen.  This proves to us that the code works as intended; of course, it's fixed to that corner, so we'll need to change this code later.  But, for now, let's commit this to block 110 before we lose it.
 
+    110 CLEAN
+    0 SET ( Fatbits rendering   saf2 2016apr17 )
+    2 SET : row ( a - a' ) -1 OVER H! 80 + ;
+    3 SET : on ( - ) $FF0000 15 FOR row NEXT DROP ;
 
-### What's Special About Random Access?
+To test what we have so far, we make sure that all buffers are actually saved to storage:
 
-Random access means that the microprocessor is free to read or alter any byte from memory that it desires, whenever it desires.  For example, when the computer is turned on for the first time, the Kestrel-3 will start reading instructions from location $FFFFFFFFFFFFFF00 (or, in decimal, 18,446,744,073,709,551,360).  It did not have to read locations 0 through 18,446,744,073,709,551,359 first to do so.  Even if the computer could read memory at a rate of 10 billion fetches per second, it'd still take over *58 years* for the computer to get around to reading this location.  Clearly, random access saves a great deal of time, as the computer often must process information from widely separated locations in memory.
+    FLUSH
 
-Sequential access, on the other hand, is what it reads on the tin.  To access a byte of memory at some arbitrary location, you must first read (and, perhaps, discard as uninteresting) all preceding bytes.  Sequential accesses typically happen when communicating with I/O devices.  I won't discuss it furher here, but be aware that various sequential access techniques exist and are useful in appropriate contexts.
+and then we restart the Forth environment:
 
+    BYE
 
+At this point, we should have a clean slate.  Let's make sure our code works:
 
-### Memory Addressing and the Kestrel-3 Memory Map
+    100 LOAD
+    on
+    .S
 
-How do you know if you're working with RAM or ROM?  For that matter, given the `48 49` sequence above, where do those numbers actually *come from?*
+We should, again, see a white rectangle in the upper-lefthand corner of the screen.  We should also see that our data stack is empty.
 
-Remember our chess board approximation from before?  Remember how I'd said that they're laid out two-dimensionally?  If you notice, along one edge of the chess board, you'll find the letters A, B, C, D, E, F, G, and H.  Along the other edge, numbers from 1 through 8.  A player can specify any location on the board by just giving one letter, and one number.  In fact, if you ever played chess on a computer before, you probably used this technique to indicate the pieces you wanted to move.  This number and letter pair are said to be *coordinates*, but for our purposes, we call them *addresses*; with that number, we can "address" any element on the chess board.
+![Drawing a white fat-bit.](images/ch2.fatbit.white.png)
 
-Computer memory works the same way, but they use a single (potentially very large, as illustrated earlier) number.
+### Black Fat Bits
 
-We call the microprocessor in the Kestrel-3 *byte-addressible.*  This means that the microprocessor can, with a suitably large enough number, identify where information is stored down to individual bytes.  Since the Kestrel-3 is a 64-bit machine, an address can be written with up to 16 nybbles.  This represents an enormous amount of space to put things.  It's almost certainly far more than you'll ever need in a computer like the Kestrel-3.  Indeed, even enterprise-grade, big-iron computers, such as mainframes and distributed clusters, aren't expected to top out their 64-bits of space until after the year 2030!
+We turn our attention now to representing those bits which are turned *off*.  Referring back to [the figure of the glyph for the letter A](#ch2_img_glyphA), note how despite the dark squares imply dark dots on the screen, we can still see the grid lines in the figure.  We similarly want some kind of visual cue on the screen when representing fat bits for dark pixels.
 
-When the computer powers on for the first time, the microprocessor needs to start executing software from a well-known location in memory.  The precise details of how this works falls outside the scope of this chapter; however, I will say that RISC-V compatible processor used in the Kestrel begins its search for software at address $FFFFFFFFFFFFFF00.  Since ROM memory holds its information even when power is off, it makes sense to place the computer's system software at this location.  This explains why, if you read something called a *memory map*, which is something that tells you what kind of memory or hardware I/O devices can be found at which addresses, ROM appears starting at address $FFFFFFFFFFFF0000.
+What we need to do is render the edges of a simple rectangle, like so:
 
-I reproduce the Kestrel-3 emulator's memory map below:
+![What we want to use to represent a black fat-bit.](images/ch2.fatbit.black.desired.png)
 
-    Starting from       you'll find this    and ending here,
-    ----------------    -----------------   ----------------
-    0000000000000000    Program RAM         0000000000FEFFFF
-    0000000000FF0000    Video RAM           0000000000FFFFFF
-    0100000000000000    Unused as of V0.2   0DFFFFFFFFFFFFFF
-    0E00000000000000    Debugger Port       0E00000000000001
-    0F00000000000000    Unused              0FFFFFFFFFFEFFFF
-    0FFFFFFFFFFF0000    ROM (duplicate)     0FFFFFFFFFFFFFFF
-    1000000000000000    Unused              FFFFFFFFFFFEFFFF
-    FFFFFFFFFFFF0000    ROM                 FFFFFFFFFFFFFFFF
-    ----------------    -----------------   ----------------
+We already know how to get the horizontal line:
 
-Contrast this against a proposed configuration for the Digilent Nexys2 version of the Kestrel-3 hardware:
+    PAGE 0 4 AT-XY
+    -1 $FF0000 H!
 
-    Starting from       you'll find this    and ending here,
-    ----------------    -----------------   ----------------
-    0000000000000000    Program RAM         0000000000FEFFFF
-    0000000000FF0000    Video RAM           0000000000FFFFFF
-    0100000000000000    Keyboard and Mouse  010000000000001F
-    0200000000000000    Video Controller    02000000000000FF
-    0300000000000000    SD Card, GPIO       030000000000000F
-    0400000000000000    Unassigned          0FFFFFFFFFFEFFFF
-    0FFFFFFFFFFF0000    ROM (duplicate)     0FFFFFFFFFFFFFFF
-    1000000000000000    Expansion Slots     EFFFFFFFFFFFFFFF
-    F000000000000000    Unassigned          FFFFFFFFFFFEFFFF
-    FFFFFFFFFFFF0000    ROM                 FFFFFFFFFFFFFFFF
-    ----------------    -----------------   ----------------
+But, how do we get the vertical strip?  We only need the top-most bit of the 16-bit row to be set, so let's give it a shot:
 
-(The reason why the same ROM image appears twice in the memory map falls outside the scope of this users guide; however, [a reason does exist](http://sam-falvo.github.io/kestrel/2014/12/25/kestrel-update-emulator-memory-map/).)
+    $8000 $FF0050 H!
 
-Note that the emulator models a reasonably close subset of one particular hardware configuration for the Kestrel-3, but it is not a perfect match.  It's conceivable that future hardware configurations will have different memory maps still.  Since an address selects which hardware component(s) the CPU will talk to, it's easy to see that a memory map for one computer may well differ from that of another, even if they're part of the same family.  For this reason, some types of system software, such as operating systems, hardware abstraction layers (HALs), and Basic Input/Output Systems (BIOS), all exist to not only enable the user to interact with the computer, but also to help application software run without concern for a specific computer's hardware configuration.
+Whoops, that's not right.  If we were to continue with this, we'd end up with something that looks like a giant T.  The reason this happens is because the microprocessor in the Kestrel-3 is a *little-endian* processor, while the video circuitry expects data to be stored in *big-endian* format[^mgia_history].  For this reason, we need to swap the upper and lower halves of the word we want to store.  You can confirm this following code words:
 
-### Dumping Memory At Last!
+    $0080 $FF0050 H!
+    $0080 $FF00A0 H!
 
-You now have the required background to dump the contents of memory to the screen and, with some practice, make some reasonable sense of the results.  To look at a particular byte in memory, you need only type its address, and use the `@` command, like so:
+You should start to see the top-most portion of the rectangle's edges start to appear in the upper left-hand corner of the screen.
 
-    * FFFFFFFFFFFF0000 @
+[^mgia_history]: The Monochrome Graphics Interface Adapter, or MGIA, core is responsible for taking data from memory and sending it to your monitor.  I originally developed it for the Kestrel-2, which originally was going to use a *word-addressed* processor.  Later in its evolution, it became more advantageous to switch the processor to use bytes as its smallest addressible unit; however, the MGIA remained word-addressed.  The Kestrel-3 inherits the Kestrel-2's MGIA (in the upgraded form of the MGIA-II) core, complete with its word-based addressing.  Fear not, however; the successor to the MGIA-II core will let you adjust its endianness, making writing software for it significantly less burdensome.
+ 
+So, our black fat-bit consists of a row of pixels, followed by a 15-tall column of pixels.  Let's incorporate that definition into our program so far:
 
-What comes back to you may be different, but it should look something like this response:
+    110 LIST
+    3 OPEN
+    3 SET : col ( a - a' ) $0080 OVER H! 80 + ;
+    5 SET : off ( - ) $FF0000 row 14 FOR col NEXT DROP ;
+    FLUSH
+    100 LOAD
+    off .S
 
-    FFFFFFFFFFFF0000:33 .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
-    * _
+The `OPEN` command is used to insert a blank line at the indicated line.  This lets us use `3 SET` subsequently to insert code before the definition of `on` (which is now on line 4).  Be careful when using `OPEN` though; anything stored on line 15 will be discarded.  Thankfully, we're no where close to having to deal with that problem.
 
-You may continue to look at subsequent addresses by simply repeating the process:
+Note also that we define `col` above the definition of `on` or `off`.  In this simple example, it's not strictly necessary to do this, so long as you make sure `col` appears before `off`.  However, I find it useful to organize words by their logical relationship to each other.  In this case, `row` and `col` are related in that they're primitives used by `on` and `off`.
 
-    * FFFFFFFFFFFF0000@
-    FFFFFFFFFFFF0000:33  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 
-    * FFFFFFFFFFFF0001@
-    FFFFFFFFFFFF0000: . 60  .  .  .  .  .  .  .  .  .  .  .  .  .  . 
-    * FFFFFFFFFFFF0002@
-    FFFFFFFFFFFF0000: .  . 00  .  .  .  .  .  .  .  .  .  .  .  .  . 
+Anyway, you should see something like the following:
 
-As you can imagine, it's *really* inconvenient to inspect memory one byte at a time like this.  You can use `.` to tell the MLM to inspect a range of memory:
+![Drawing a black fat-bit.](images/ch2.fatbit.black.png)
 
-    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
-    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
-    * _
+### Rows of Fat Bits
 
-You can look at any contiguous region of memory using this same approach, as long as the second address is larger than the first.  If you want to display more than 16 bytes at a time, it will break the read-out into 16-byte chunks for easier reading, like so:
+At this point, we have a means of drawing a single white or black fat bit in the upper left-hand corner of the display.  But, what we'd really like is to draw a complete matrix of them.  A matrix is an array of arrays, of course, so it seems logical that our next step is to simply get an array of fat bits up on the screen first.
 
-    * FFFFFFFFFFFF0000.FFFFFFFFFFFF003F@
-    FFFFFFFFFFFF0000:33 60 00 00 EF 00 80 1E 00 00 00 00 00 00 00 0E 
-    FFFFFFFFFFFF0010:00 00 01 00 00 00 00 00 4D 4C 4D 2F 4B 33 20 56 
-    FFFFFFFFFFFF0020:30 2E 34 0A 49 4E 53 4E 20 41 44 44 52 20 41 54 
-    FFFFFFFFFFFF0030:20 20 20 20 20 20 20 49 4E 53 4E 20 41 43 43 45 
-    * _
+I need a plan to go about doing this.  I won't go into the different approaches I've considered here; this chapter is already quite long as it is.  Instead, I'll just invoke the power of successive refinement and iterative programming.
 
-If we want to look at the contents of RAM instead of ROM, simply change the address (range) used.
+For the moment, let's pretend we have a version of `on` and `off` which renders a white or black fat-bit where we tell it.  That is, instead of hardcoding `$FF0000` as the frame buffer memory address, we accept this value from the stack.  It would be very convenient if we can invoke a sequence like, `on off on off`, to just render fat-bits horizontally.  Since `on` and `off` would accept an address from the stack, it follows that they *must* also leave an address on the stack as well.
 
-    * 0000000000000000.000000000000003F@
-    0000000000000000:00 00 00 00 00 00 00 0E 00 00 01 00 00 00 00 00 
-    0000000000000010:08 00 FF FF FF FF FF 0F B6 0E 00 00 00 00 00 00 
-    0000000000000020:08 00 FF FF FF FF FF 0F 00 00 01 00 00 00 00 00 
-    0000000000000030:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    * _
+In other words, we need `on` and `off` to have the following stack effects:
 
-(Tip: You can also just write `0.3F@`, since leading zeros are assumed.  This is why, when accessing ROM, we always had to type so many `F`s!)
+    : on ( a - a' ) ...
+    : off ( a - a' ) ...
 
-You'll probably find that when looking at memory layouts like this, you come to rely on the relative position of information in the display.  To make it easier to read memory dumps with this technique, the MLM will pad a dump with periods as appropriate:
+But what is `a'` in this case?  Since a byte holds 8 pixels, and our fat-bits are 16-pixels wide, it follows then that `a' = a + 2`.  Provided we don't do this more than 40 times in a row, we should be able to draw a horizontal strip of fat-bits.
 
-    * 0.3@
-    0000000000000000:00 00 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
-    * 4.7@
-    0000000000000000: .  .  .  . 00 00 00 0E  .  .  .  .  .  .  .  . 
-    * 8.B@
-    0000000000000000: .  .  .  .  .  .  .  . 00 00 01 00  .  .  .  . 
-    * C.F@
-    0000000000000000: .  .  .  .  .  .  .  .  .  .  .  . 00 00 00 00 
-    * _
+The simplest way to achieve this is to change our existing definitions like so:
 
-This keeps the data you're interested in a consistent location on the screen at all times.
+    110 LIST
+    4 SET : on ( a - a') DUP 15 FOR row NEXT DROP 2 + ;
+    5 SET : off ( a - a') DUP row 14 FOR col NEXT DROP 2 + ;
+    110 LIST  ( to make sure our changes took )
+    FLUSH
 
-### Altering Memory
+Now, we need to test them to make sure our assumptions hold.
 
-The `,` command changes a single byte of memory.  For example, if we wanted to store the text string `HI` into RAM, we could use a command like the following:
+    BYE
+    100 LOAD
+    $FF0000 on off on off HEX U. DECIMAL
 
-    * 10000.48,49,
-    * _
+You should see something like the following:
 
-You can verify the information is stored by dumping that region of memory again:
+![An array of fat-bits.](images/ch2.fatbit.array.png)
 
-    * 10000.10001@
-    0100000000010000:48 49  .  .  .  .  .  .  .  .  .  .  .  .  .  .
-    * _
+Notice that the address left on the stack is 8 greater than what we started with, which is what we'd expect after incrementing it by two four times.  Further note the on/off pattern on the top of the display.
 
-To prove to yourself that it works, try repeating the above exercise, except using memory starting at address $0100000000010002 and $0100000000010003.
+But, calling `on` and `off` manually isn't the goal; we want to invoke them in a pattern based on the numbers corresponding to a row in a glyph's font.  The top of the letter A, [if you'll recall](#ch2_img_glyphA), is represented by the number `24`.  How can we convert a number into a set of fat-bits?  Let's make a word which handles this one bit at a time.  Literally.
 
-Note that you can confirm to yourself that ROM is, truly, read-only by attempting to store data into low memory:
+    : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE off THEN SWAP 2* SWAP ;
+    PAGE 0 4 AT-XY
+    24 $FF0000
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
 
-    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
-    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
-    * FFFFFFFFFFFF0000.48,49,
-    * FFFFFFFFFFFF0000.FFFFFFFFFFFF0003@
-    FFFFFFFFFFFF0000:33 60 00 00  .  .  .  .  .  .  .  .  .  .  .  . 
-    * _
+![The top row of the letter A.](images/ch2.fatbit.A.row.png)
 
-Depending on the version of the emulator you use, you might find you see warnings about attempts to write into ROM.  These can be safely ignored for now, for as you can see above, your attempts to write into ROM space are ignored.  When developing software for the Kestrel, though, you'll want to watch out for warnings like these, as they indicate potentially buggy software.  If you remember working with Windows 3.1, you've probably seen their "general protection fault" messages (or "segmentation faults" in Linux), that's the computer preventing exactly that kind of errant memory access.
+Success!  Now we commit this to our program in block memory.
 
-Pro-tip: If you know you're wanting to store a number larger than a byte, then you can type the number naturally, provided it fits inside of 64 bits, and use as many commas as required to store the whole number.  For example, a 16-bit number could be written as `4948,,`, a 32-bit number as `DEADBEEF,,,,`, and so on.  Unfortunately, no corresponding method exists for reading memory out as 16-bit or larger quantities.
+    110 LIST
+    7 SET : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE OFF THEN
+    8 SET     SWAP 2* SWAP ;
+    9 SET : row ( n a - ) 7 FOR pixel NEXT 2DROP ;
+    FLUSH
 
-Recall from the previous section that video RAM ranges from $FF0000 to $FFFFFF.  Try writing various numbers into this region and observe the effects on the video output window.  What sequence of numbers, and to which addresses, do you need to write to produce interesting shapes?
+Whoa, hold up!  I'm redefining `row` on line 9.  How is this supposed to work?  Forth, unlike other programming languages, has what's called a *hyper-static global environment.*  These four fancy words basically means, very simply, if you *redefine* a word, then *prior* uses of the word *do not* change meaning.  Only future uses of the word take on the new semantics.
 
-### CPU Registers
+**This is why you hear the word *context* so frequently in Forth programming.**  It's clear that, by the time line 9 rolls around, the *context* for what a row of pixels *means* has changed.  We simply make this known to Forth in the most natural way possible; we simply *redefine* it as we need it, *when* we need it.
 
-At this point, you know enough to plug a program into memory by typing in the hexadecimal codes that comprise it, but we still don't know how to really communicate with such a program without actually altering the program itself, or without altering an otherwise reusable piece of code into something more tightly bound to its parameters.  Writing software much beyond simple toys will require us to write more general-purpose programs.  Doing that requires we use a different technique to "talk" to the program.
+Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by various flavors of Lisp, if you were to change the meaning of `row` like this:
 
-The CPU, the device responsible for interpreting the program you store in memory, has a special kind of memory of its own, called *registers*.  Each register can hold 64 bits worth of information, and it has 32 of them.  One, called the program counter (PC), tells the CPU where the next instruction to perform is coming from.  The remaining 31 registers are called *general purpose* registers.  Some of these registers are used for accounting purposes, like keeping track of subroutine linkage, while others are freely available for use to pass parameters into or out of a subroutine.  Exact details will depend on the program being run.
+    (define (row ...) ...definition 1...)
+    (define (on addr) (times 16 (let (addr (row addr)))))
+    ... some more code here ...
+    (define (row ...) ...definition 2...)
 
-These registers are addressed by name, ranging from X1 through X31.  Note that a pseudo-register X0 does exist, but it's hardwired to the constant zero; you can never change it, a feature more useful than you might initially think.
+then the meaning of `on` would fundamentally change.  Were you to do this in a more statically controlled language like C, you'll just get a compile-time error for duplicately defined symbols.
 
-When a program invokes the MLM, either through an SBREAK instruction or by using a JAL or JALR instruction to invoke the MLM directly, it *saves* the previously running program's registers in RAM for inspection.  You can use the `X` command to address this special location, and `:` to inspect it.  For example, to dump all 32 general purpose registers, you'd write:
+Anyway, we can prove that this works easily enough:
 
-    * 0X.1FX:
-    0000000000000010: .  .  .  .  .  .  .  . B6 0E 00 00 00 00 00 00 
-    0000000000000020:08 00 FF FF FF FF FF 0F 00 00 01 00 00 00 00 00 
-    0000000000000030:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000040:00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000050:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000060:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000070:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000080:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000090:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000A0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000B0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000C0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000D0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000E0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    00000000000000F0:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000100:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-    0000000000000110:00 00 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
-    * _
+    BYE
+    100 LOAD
+    24 $FF0000 row .S
 
-Here, instead of using `@` to inspect memory, we use `:`.  This is a special version of the memory dump command which knows how to compute the appropriate addresses used by the MLM to represent the interrupted program's registers.  Indeed, when the result appears on the screen, it looks like you had used the `@` command all along.
+Note that we use `2DROP` to clean the stack up after we're done rendering the row.  Cleaning up after ourselves is important because it lets us think about words that perform an action (a "procedure") strictly as *verbs*; once they're proven to work, we can treat them axiomatically when debugging more complex programs later.
 
-*Note:* Observe that register `0X` has a non-zero value (`B6 0E`...)!  Since X0 always holds zero, the machine-language monitor uses its memory space for a different purpose.
+Now that we can render a row, we need to use `row` to build out our matrix on the screen.  We want each row to appear 16 pixels below its predecessor.  Since each row of pixels requires 80 bytes of frame buffer memory, that corresponds to 1280 bytes.  So, let's make a new word `matrix` to render the complete matrix.
 
-You can use `:` with a single address as well:
+    : matrix ( b a - ) 7 FOR OVER C@ OVER row 1280 + SWAP 1+ SWAP NEXT 2DROP ;
 
-    * 0X:
-    0000000000000010: .  .  .  .  .  .  .  . B6 0E 00 00 00 00 00 00 
-    * 5X:
-    0000000000000040:00 00 01 00 00 00 00 00  .  .  .  .  .  .  .  . 
-    * _
+**Note.** I'm no longer taking byte values directly from the stack; now, `b` refers to a byte in memory (`C@` means *character fetch*).  Yes, Kestrel Forth is a 64-bit Forth, which means we can pass 8 bytes directly in if we wanted to.  However, it's more useful to draw data from memory, which we'll see in a later section.
 
-As you might imagine, since the `X` command merely computes a memory address to work with, we can use it with the `,` command to effect changes to the interrupted program's registers as well.  For example, if we want to set X1 to the value $1111, and X2 to $2222, we would write:
+We can test this simply enough by copying the bytes from [the glyph for A](#ch2_img_glyphA) into a 64-bit wide variable, and sending it through `matrix` like so:
 
-    * 1X.1111,,,,,,,,
-    * 2X.2222,,,,,,,,
-    * _
+    VARIABLE bm ( bit map )
+    $183C3C667EC3C300 bm !
+    PAGE 0 17 AT-XY
+    bm $FF0000 matrix
 
-*Note:* Be careful not to double-up your Xs.  It will result in an incorrect address and can lead to memory corruption if you're not careful.
+![Whoops!  I forgot to swap bytes due to MGIA endian differences from the CPU.](images/ch2.upsidedown.A.png)
 
-Can you see why I used eight `,`s instead of just two?  What would happen if I just used two?
+Whoops; I forgot to swap the bytes due to the MGIA's big-endian accesses to memory.  Even so, I think we've adequately proven that `matrix` works as intended.  Let's commit it to block storage now.
 
-## Your First Program
+    110 LIST
+    10 SET : matrix ( b a - ) 7 FOR OVER C@ OVER row
+    11 SET     1280 + SWAP 1+ SWAP NEXT 2DROP ;
+    FLUSH
+    110 LIST
 
-Now that you know how to write program bytes into RAM, and how to pass that program information it needs to run via CPU registers, let's now program the Kestrel-3 to add two numbers.  Without going into the process of how I arrived at these numbers, you can enter the following command:
+This block is starting to look pretty full, so I think we'll end it there.  Really, the whole purpose of this block is to render the matrix, so let's update the index title accordingly.
 
-    * 10000.B3,81,20,00,73,00,10,00,
-    * _
+    0 SET ( Fatbits: matrix   saf2 2016apr17 )
+    FLUSH
+    110 LIST
 
-This program takes two numbers, in th X1 and X2 registers, and returns the result in X3.  So, let's plug in some values to add:
+One final test to make sure it works from a clean slate:
 
-    * 1X.1234,,,,,,,,
-    * 2X.3210,,,,,,,,
-    * 3X.0000,,,,,,,,
-    * _
+    BYE
+    100 LOAD
+    VARIABLE bm
+    $00C3C37E663C3C18 bm !
+    bm $FF0000 matrix
 
-This places the value $1234 in register X1, and $3210 in register X2, and finally, zero in X3.  We can confirm the registers are set accordingly like so:
-
-    * 1X.3X:
-    0000000000000020:34 12 00 00 00 00 00 00 10 32 00 00 00 00 00 00 
-    0000000000000030:00 00 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
-    * _
-
-We execute the program by telling the monitor where to go:
-
-    * 10000g
-    MLM/K3 V0.4
-    BREAK AT           0000000000010004
-    * _
-
-We should be able to inspect the registers at this point:
-
-    * 3X:
-    0000000000000030:44 44 00 00 00 00 00 00  .  .  .  .  .  .  .  . 
-    * _
-
-If the result isn't $4444, something went wrong.  Double-check that the numbers you typed above for the program are correct and try again.  If it matches the result give here, congradulations!  You've just written your very first Kestrel-3 program!
+We should see a giant version of the letter A.
 

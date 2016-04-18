@@ -158,7 +158,11 @@ So, our black fat-bit consists of a row of pixels, followed by a 15-tall column 
     100 LOAD
     off .S
 
-You should see something like the following:
+The `OPEN` command is used to insert a blank line at the indicated line.  This lets us use `3 SET` subsequently to insert code before the definition of `on` (which is now on line 4).  Be careful when using `OPEN` though; anything stored on line 15 will be discarded.  Thankfully, we're no where close to having to deal with that problem.
+
+Note also that we define `col` above the definition of `on` or `off`.  In this simple example, it's not strictly necessary to do this, so long as you make sure `col` appears before `off`.  However, I find it useful to organize words by their logical relationship to each other.  In this case, `row` and `col` are related in that they're primitives used by `on` and `off`.
+
+Anyway, you should see something like the following:
 
 ![Drawing a black fat-bit.](images/ch2.fatbit.black.png)
 
@@ -194,4 +198,90 @@ Now, we need to test them to make sure our assumptions hold.
 You should see something like the following:
 
 ![An array of fat-bits.](images/ch2.fatbit.array.png)
+
+Notice that the address left on the stack is 8 greater than what we started with, which is what we'd expect after incrementing it by two four times.  Further note the on/off pattern on the top of the display.
+
+But, calling `on` and `off` manually isn't the goal; we want to invoke them in a pattern based on the numbers corresponding to a row in a glyph's font.  The top of the letter A, [if you'll recall](#ch2_img_glyphA), is represented by the number `24`.  How can we convert a number into a set of fat-bits?  Let's make a word which handles this one bit at a time.  Literally.
+
+    : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE off THEN SWAP 2* SWAP ;
+    PAGE 0 4 AT-XY
+    24 $FF0000
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+    pixel
+
+![The top row of the letter A.](images/ch2.fatbit.A.row.png)
+
+Success!  Now we commit this to our program in block memory.
+
+    110 LIST
+    7 SET : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE OFF THEN
+    8 SET     SWAP 2* SWAP ;
+    9 SET : row ( n a - ) 7 FOR pixel NEXT 2DROP ;
+    FLUSH
+
+Whoa, hold up!  I'm redefining `row` on line 9.  How is this supposed to work?  Forth, unlike other programming languages, has what's called a *hyper-static global environment.*  These four fancy words basically means, very simply, if you *redefine* a word, then *prior* uses of the word *do not* change meaning.  Only future uses of the word take on the new semantics.
+
+**This is why you hear the word *context* so frequently in Forth programming.**  It's clear that, by the time line 9 rolls around, the *context* for what a row of pixels *means* has changed.  We simply make this known to Forth in the most natural way possible; we simply *redefine* it as we need it, *when* we need it.
+
+Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by various flavors of Lisp, if you were to change the meaning of `row` like this:
+
+    (define (row ...) ...definition 1...)
+    (define (on addr) (times 16 (let (addr (row addr)))))
+    ... some more code here ...
+    (define (row ...) ...definition 2...)
+
+then the meaning of `on` would fundamentally change.  Were you to do this in a more statically controlled language like C, you'll just get a compile-time error for duplicately defined symbols.
+
+Anyway, we can prove that this works easily enough:
+
+    BYE
+    100 LOAD
+    24 $FF0000 row .S
+
+Note that we use `2DROP` to clean the stack up after we're done rendering the row.  Cleaning up after ourselves is important because it lets us think about words that perform an action (a "procedure") strictly as *verbs*; once they're proven to work, we can treat them axiomatically when debugging more complex programs later.
+
+Now that we can render a row, we need to use `row` to build out our matrix on the screen.  We want each row to appear 16 pixels below its predecessor.  Since each row of pixels requires 80 bytes of frame buffer memory, that corresponds to 1280 bytes.  So, let's make a new word `matrix` to render the complete matrix.
+
+    : matrix ( b a - ) 7 FOR OVER C@ OVER row 1280 + SWAP 1+ SWAP NEXT 2DROP ;
+
+**Note.** I'm no longer taking byte values directly from the stack; now, `b` refers to a byte in memory (`C@` means *character fetch*).  Yes, Kestrel Forth is a 64-bit Forth, which means we can pass 8 bytes directly in if we wanted to.  However, it's more useful to draw data from memory, which we'll see in a later section.
+
+We can test this simply enough by copying the bytes from [the glyph for A](#ch2_img_glyphA) into a 64-bit wide variable, and sending it through `matrix` like so:
+
+    VARIABLE bm ( bit map )
+    $183C3C667EC3C300 bm !
+    PAGE 0 17 AT-XY
+    bm $FF0000 matrix
+
+![Whoops!  I forgot to swap bytes due to MGIA endian differences from the CPU.](images/ch2.upsidedown.A.png)
+
+Whoops; I forgot to swap the bytes due to the MGIA's big-endian accesses to memory.  Even so, I think we've adequately proven that `matrix` works as intended.  Let's commit it to block storage now.
+
+    110 LIST
+    10 SET : matrix ( b a - ) 7 FOR OVER C@ OVER row
+    11 SET     1280 + SWAP 1+ SWAP NEXT 2DROP ;
+    FLUSH
+    110 LIST
+
+This block is starting to look pretty full, so I think we'll end it there.  Really, the whole purpose of this block is to render the matrix, so let's update the index title accordingly.
+
+    0 SET ( Fatbits: matrix   saf2 2016apr17 )
+    FLUSH
+    110 LIST
+
+One final test to make sure it works from a clean slate:
+
+    BYE
+    100 LOAD
+    VARIABLE bm
+    $00C3C37E663C3C18 bm !
+    bm $FF0000 matrix
+
+We should see a giant version of the letter A.
 

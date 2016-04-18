@@ -285,3 +285,22 @@ One final test to make sure it works from a clean slate:
 
 We should see a giant version of the letter A.
 
+Since we've accomplished one of our goals, now seems like a good time to update documentation for our software.  I'm going to place our documentation in block 111.
+
+    111 CLEAN
+    0 SET \ shadow docs: matrix    saf2 2016apr17
+    2 SET row (a - a') draws 16 white pixels at the screen addr
+    3 SET     passed in.  Returns the next addr in the column.
+    4 SET col (a - a') draws a single pixel, but otherwise
+    5 SET     similar to row.
+    6 SET on, off (a - a') draws a white or black fat-bit resp.
+    7 SET pixel (n a - n' a') draws a single pixel, taken from
+    8 SET     bit 7 of n.  a' points to next fat-bit, n' is 2*n.
+    9 SET row (n a -) draws a single row of fat-bits, based
+    10 SET     on the value of n.
+    11 SET matrix (b a -) draws an 8x8 grid of fat-bits. Data
+    12 SET     comes from a buffer pointed at by b.
+    FLUSH
+
+These kinds of screens are historically known as *shadow blocks*.  They contain synopses which explain the roles of the words defined in the corresponding non-shadow block.  By convention, even-numbered blocks contains code, and odd-numbered blocks contains commentary.  It's a good habit to write shadow comments once a block of code has been composed.  Forth is extremely terse, and it's much easier to forget the purpose of a word sooner than in other, more conventional programming languages.
+

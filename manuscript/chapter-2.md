@@ -47,11 +47,12 @@ A font is, in its most basic form, a collection of glyphs.  Each glyph describes
 
 You might have heard the term "byte" before, but never really understood what it meant on a concrete level.  A byte is simply eight bits.  A bit, then, is an on/off value, stored in numerical form as either a 1 or a 0.  This combination of bits allows us to represent numbers, text, etc.  The interpretation, really, is entirely context dependent.  This is important to us because of how we exploit this fact to render text on the screen.  Below, you'll find a blown-up example of what I mean.  It's the letter A itself, represented both in terms of on/off pixels, and the corresponding hexadecimal and decimal representation.
 
+{id="ch2_img_glyphA"}
 ![The glyph for the letter A.](images/ch2.glyphA.png)
 
 What we want our font editor to do, ultimately, is render a character in "fat bits", approximating the graph on the left-hand side above, where it's easier for us to see and later manipulate.  We don't really care about the corresponding hexadecimal or even their decimal values.  That's something for the computer to worry about.
 
-### Starting out with Fat Bits
+### White Fat Bits
 
 The most fundamental thing we have is "the bit."  It's either on (1) or off (0).  On bits render as white on the screen, so we're going to recreate that in the fat-bits magnification as well.  So, let's write a simple program to render a bit that is "on".  I'm going to zoom in by a factor of 16; meaning, each pixel in a character will now occupy a 16 pixel rectangle on the screen.  Since rectangles aren't fundamental objects, let's break this down even further.
 
@@ -121,4 +122,11 @@ We should, again, see a white rectangle in the upper-lefthand corner of the scre
 
 ![Drawing a white fat-bit.](images/ch2.fatbit.white.png)
 
+### Black Fat Bits
+
+We turn our attention now to representing those bits which are turned *off*.  Referring back to [the figure of the glyph for the letter A](#ch2_img_glyphA), note how despite the dark squares imply dark dots on the screen, we can still see the grid lines in the figure.  We similarly want some kind of visual cue on the screen when representing fat bits for dark pixels.
+
+What we need to do is render the edges of a simple rectangle, like so:
+
+![What we want to use to represent a black fat-bit.](images/ch2.fatbit.black.desired.png)
 

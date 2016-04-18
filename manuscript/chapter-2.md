@@ -130,3 +130,33 @@ What we need to do is render the edges of a simple rectangle, like so:
 
 ![What we want to use to represent a black fat-bit.](images/ch2.fatbit.black.desired.png)
 
+We already know how to get the horizontal line:
+
+    PAGE 0 4 AT-XY
+    -1 $FF0000 H!
+
+But, how do we get the vertical strip?  We only need the top-most bit of the 16-bit row to be set, so let's give it a shot:
+
+    $8000 $FF0050 H!
+
+Whoops, that's not right.  If we were to continue with this, we'd end up with something that looks like a giant T.  The reason this happens is because the microprocessor in the Kestrel-3 is a *little-endian* processor, while the video circuitry expects data to be stored in *big-endian* format.  For this reason, we need to swap the upper and lower halves of the word we want to store.  You can confirm this following code words:
+
+    $0080 $FF0050 H!
+    $0080 $FF00A0 H!
+
+You should start to see the top-most portion of the rectangle's edges start to appear in the upper left-hand corner of the screen.
+
+So, our black fat-bit consists of a row of pixels, followed by a 15-tall column of pixels.  Let's incorporate that definition into our program so far:
+
+    110 LIST
+    3 OPEN
+    3 SET : col ( a - a' ) $0080 OVER H! 80 + ;
+    5 SET : off ( - ) $FF0000 row 14 FOR col NEXT DROP ;
+    FLUSH
+    100 LOAD
+    off .S
+
+You should see something like the following:
+
+![Drawing a black fat-bit.](images/ch2.fatbit.black.png)
+

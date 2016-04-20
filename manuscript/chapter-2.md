@@ -1,5 +1,7 @@
 # Getting to Know Forth
 
+# TODO: Screenshots for cursor code.
+
 In this chapter, you'll have an understanding of how one typically writes software in Forth for the Kestrel-3, *on* the Kestrel-3.  This chapter is not directly intended to teach you how to program the Kestrel-3; rather, it's an illustration of what it's like to write software in a native Forth environment.  Unlike most programming tutorials, I'm just going to dive right into a non-trivial application: a simple font editor that you can use to make custom character sets.
 
 It's not terribly complicated as applications go; but, it will touch many of the facilities of the Kestrel-3 on different levels of abstraction, and will introduce everything from the most basic to some moderately advanced Forth programming idioms that you might not have thought possible from reading other chapters of this book.
@@ -303,4 +305,169 @@ Since we've accomplished one of our goals, now seems like a good time to update 
     FLUSH
 
 These kinds of screens are historically known as *shadow blocks*.  They contain synopses which explain the roles of the words defined in the corresponding non-shadow block.  By convention, even-numbered blocks contains code, and odd-numbered blocks contains commentary.  It's a good habit to write shadow comments once a block of code has been composed.  Forth is extremely terse, and it's much easier to forget the purpose of a word sooner than in other, more conventional programming languages.
+
+## Your Move: Prompting the User with a Cursor
+
+We've gotten a reasonable facsimile of the graph to show on the screen.  But, now, let's add a *cursor* so that we can indicate which cell on the fatbit grid to change.
+
+OK, more specifications.  There are several approaches we can take to accomplish this goal, but once again, I'm going to compact my thought process down for the sake of shortening an already lengthy chapter.
+
+I think it'd be nice to have a small, grey dot in the middle of a cell to indicate the current cell.  Of course, as I write this, the Kestrel-3 does not have greyscale capability, so we'll emulate it with a simple dither pattern, like so:
+
+![The desired cursor shape.](images/ch2...)
+................  0000  0000
+................  0000  0000
+................  0000  0000
+................  0000  0000
+....@.@.@.@.....  0AA0  A00A
+.....@.@.@.@....  0550  5005
+....@.@.@.@.....  0AA0  A00A
+.....@.@.@.@....  0550  5005
+....@.@.@.@.....  0AA0  A00A
+.....@.@.@.@....  0550  5005
+....@.@.@.@.....  0AA0  A00A
+.....@.@.@.@....  0550  5005
+................  0000  0000
+................  0000  0000
+................  0000  0000
+................  0000  0000
+
+
+I like this design, because it leaves a large portion of the cell visible to the user, while still providing a visual cue to the user which cell is currently referenced by the program.  Other options include cross-hairs, an arrow shape, etc.  As we'll soon see, this is actually one of the simpler patterns to render.
+
+I've also converted the bitmap pattern into hexadecimal values both for human consumption (middle column), and in the proper format expected by the MGIA hardware (right-most column).  We'll be using the latter column later.
+
+### Rendering the Cursor
+
+For now, let's keep things simple, and just render the cursor on the screen in the upper left-hand corner.  We can expand from there later.
+
+First, we start out with defining our bitmap data.
+
+    CREATE cursorImg
+    0 , 0 , 0 , 0 , $A00A , $5005 , $A00A , $5005 ,
+    $A00A , $5005 , $A00A , $5005 , 0 , 0 , 0 , 0 ,
+
+Next, I'll make a word that "paints" the cursor, line by line, just like we did with the fatbit.  We know in this case that it must accept two addressses (one for our cursor image, and one for the framebuffer), and it should leave two addresses on the stack (same thing, suitably adjusted) so we can just run the same word again and again until the cursor has been rendered.
+
+Unlike painting the fatbits, though, we want each on-bit in our cursor image to *toggle* the on-screen bit on or off.  Off bits should cause no action to take place.  It turns out there's a logical operator called *exclusive-OR* (`XOR`) which does this for us.  As you might imagine, `H@` is the compliment to `H!`, where it reads a 16-bit quantity from memory (*half-word fetch*).
+
+    : row ( c a - c' a' ) OVER @ OVER H@ XOR OVER H! 80 + SWAP CELL+ SWAP ;
+
+We can test it out like so:
+
+    cursorImg $FF0000
+    row row row row
+    row row row row
+    row row row row
+    row row row row
+
+At this point, we should have a small grey dot in the upper lefthand corner of the screen.
+
+![Proof of concept for the cursor.](images/ch2...)
+
+We see that it works, so let's commit this to block storage for future use.
+
+    108 CLEAN
+    0 SET ( Cursor Display    saf2 2016apr19)
+    2 SET CREATE cursorImg HEX
+    3 SET   0000 , 0000 , 0000 , 0000 , A00A , 5005 , A00A , 5005 ,
+    4 SET   A00A , 5005 , A00A , 5005 , 0000 , 0000 , 0000 , 0000 ,
+    5 SET DECIMAL
+    7 SET : row ( c a - c' a' ) OVER @ OVER H@ XOR OVER H!
+    8 SET     80 + SWAP CELL+ SWAP ;
+    FLUSH
+
+We can make sure everything still works by testing the program so far:
+
+    BYE
+    108 LOAD
+    cursorImg $FF0000 row row row row row row row row row row row row
+
+That should work well enough to render the cursor onto the sreen.  If so, let's link it into our font editor program.
+
+    100 LIST
+    3 SET 110 LOAD ( matrix visuals )
+    4 SET 108 LOAD ( cursor visuals )
+
+### Moving the Cursor
+
+The cursor doesn't serve much purpose if it's just stuck in one spot on the screen; there needs to be a way to actually move it around.  So, our next step is to adjust the code we've written so far so that we can place it anywhere on our matrix.
+
+We know the fatbit matrix is 8 wide and 8 tall, so it seems reasonable that we should make some kind of mathematical formula that translates a pair of small integers into a screen address.  `cursor` already accepts a screen address, so there is no need to change `cursor` itself.
+
+We know that each cell is two bytes wide, so it seems reasonable that we multiply `x` by two and add to some base address.  Let's write that first, since that should be pretty simple to get working.
+
+    : addr ( x - a ) 2* $FF0000 + ;
+
+Well, that was pretty easy.  Let's test it.
+
+    HEX
+    0 addr U.
+    1 addr U.
+    2 addr U.
+    7 addr U.
+    DECIMAL
+
+The first three prints establish the pattern we want to see; with each increasing coordinate, the resulting address goes up by two.  The final test is just for good measure.
+
+![Testing our address computation so far.](images/ch2...)
+
+**Preconditions again.**  We will *never* invoke this function with a `x` coordinate outside the range of 0 to 7.  So, we do not include any explicit error-checking logic here.  In most other programming languages, the very *thought* of coding like this would be anathema.  If you feel safer adding this bounds-checking logic, I'll leave it as an exercise for you to consider.  However, just be aware: our *intention* that `addr` be invoked with an `x` coordinate in the range 0..7 will be documented in the shadow block later, but it will be *enforced* in the *code* elsewhere.  I can get away with this because `addr` is very clearly a function that is of domain-specific, very limited use outside of the font editor.
+
+**If**, however, I were writing a word for general purpose consumption, where I simply *didn't trust* the code invoking my software, then things would be very different.  I would never trust my inputs, and would strongly encourage bounds checking in this case.  However, this is a topic for another time, and is well beyond the scope of this chapter.
+
+Let's try rendering the cursor in the 3rd place over to the right, just to get a feel of how everything is supposed to fit together:
+
+    cursorImg 3 addr row row row row row row row row row row row row
+
+![Cursor appears to the right.](images/ch2...)
+
+It's now time to consider the `y` coordinate, or the vertical axis.  Like the horizontal axis, we are going to constrain it to the values 0 to 7 inclusive elsewhere in the code.  But, our address computation is different.  Each fatbit cell is 16 pixels tall, and as we recall from before, each row on the screen consists of 80 bytes.  So, each row of the fatbit matrix consists of 1280 bytes of memory.  So, let's account for that in our definition of `addr` now:
+
+    : addr ( x y - a ) 1280 * SWAP 2* + $FF0000 + ;
+
+As you can see, the effective address computation is a bit more complex, but not terribly so.  We first account for the `y` coordinate, then tackle the `x` coordinate separately and add them together.  Once we have our relative offset, we add the base address of the screen, and that's our final address for the cursor.  Let's test it.
+
+    PAGE 0 17 AT-XY
+    cursorImg 3 4 addr row row row row row row row row row row row row
+
+![The cursor can now be placed vertically too.](images/ch2...)
+
+We see that things work, so let's commit this to block storage.
+
+    108 LIST
+    10 SET : addr ( x y - a ) 1280 * SWAP 2* + $FF0000 + ;
+    FLUSH
+
+You can probably predict how we're going to write a word that draws the entire 16x16 pixel image for the cursor.  Here's how I did it, and tested it.
+
+    : cursor ( x y - ) cursorImg -ROT addr 15 FOR row NEXT 2DROP ;
+    PAGE 0 17 AT-XY
+    2 4 cursor 7 5 cursor .S
+
+![We can draw the cursor anywhere we want, and stack looks good.](images/ch2...)
+
+Now that we have this code working, we can commit this as well.
+
+    108 LIST
+    12 SET : cursor ( x y - ) cursorImg -ROT addr
+    13 SET     15 FOR row NEXT 2DROP ;
+    FLUSH
+
+Looks like we have completed our cursor drawing program, so now it's time to update our documentation.
+
+    109 CLEAN
+    0 SET \ shadow docs: Cursor rendering
+    2 SET cursorImg (-a) answers the address of a 16x16 pixel bit-
+    3 SET     map containing the cursor image.
+    4 SET row (c a-c' a') toggles bits in the on-screen frame-
+    5 SET     buffer if and only if corresponding bits in the
+    6 SET     cursor bitmap are set.  Adjusts pointers.
+    7 SET addr (x y-a) answers the framebuffer address correspond-
+    8 SET     ing to the specified coordinate in the fatbit
+    9 SET     matrix.
+    10 SET cursor (x y-) draws or undraws (if called again) the
+    11 SET     cursor image at the designated place on the fat-
+    12 SET     bit matrix.
+    FLUSH
 

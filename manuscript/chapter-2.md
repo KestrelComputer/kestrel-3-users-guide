@@ -471,3 +471,127 @@ Looks like we have completed our cursor drawing program, so now it's time to upd
     12 SET     bit matrix.
     FLUSH
 
+### Making Sure It All Works Together
+
+A final test is to make sure that our fatbits matrix code and our cursor rendering code actually works together.  There's no obvious reason why they should interfere; however, computer software has a nasty habit of surprising the author in this respect.
+
+We'd like to create a simple glyph buffer, display it, and present the cursor in its home position (0,0).  That should be enough for now.
+
+    VARIABLE glyph
+    $1122334455667788 glyph !
+    PAGE 0 17 AT-XY  glyph $FF0000 matrix  0 0 cursor
+
+The result should look somewhat like this:
+
+![Confirming that the fatbit viewing code and the cursor display works together.](images/ch2...)
+
+Once we know that it does, let's commit it to block storage.
+
+    106 CLEAN
+    0 SET ( full screen update    saf2 2016apr22 )
+    2 SET VARIABLE glyph
+    3 SET $1122334455667788 glyph !
+    4 SET : everything ( - ) PAGE glyph $FF0000 matrix 0 0 cursor ;
+    FLUSH
+
+    100 LIST
+    5 SET 106 LOAD ( full screen visualization )
+    FLUSH
+
+We should now be able to test that it integrates nicely:
+
+    BYE
+    100 LOAD everything
+
+After a few seconds, the screen should look like before, with a simple fatbits matrix and a cursor in position (0,0).  The only difference is the `OK` prompt will partially overwrite the results.
+
+When we're happy with that, let's not forget to update our shadow documentation.
+
+    107 CLEAN
+    0 SET \ shadow docs: full screen update
+    2 SET glyph (-a) is a 64-bit buffer holds the current image of the
+    3 SET   glyph being edited.
+    4 SET everything (-) redraws the entire screen from scratch.  This
+    5 SET   is a very slow operation since it touches every pixel on
+    6 SET   the screen, so use with care.
+    FLUSH
+
+## Quitting the Application
+
+Let's switch gears for a moment.  So far, we've been writing code to provide visual output to the user.  However, we also need to accept input as well.  We know we want the font editor to run as an application; however, we need a way to exit the editor so that the user can return to a normal Forth `ok` prompt whenever he or she wants.  I'm going to pick an arbitrary convention for this now.  We can implement this logic simply enough by waiting for a key press of the letter `Q`, like this:
+
+    : quit? ( c - f ) 81 = ;
+    : main ( - ) BEGIN KEY quit? UNTIL ;
+
+We can test this now like so:
+
+    main
+
+The computer should appear to lock up, doing absolutely nothing what-so-ever until you type a capital `Q` on the keyboard.
+
+Once we've confirmed this works as expected, let's bundle it into the rest of our application as well.
+
+    100 LIST
+    6 SET 104 LOAD ( main event loop )
+    104 CLEAN
+    0 SET ( main event loop   saf2 2016apr22 )
+    2 SET : quit? ( c - f ) 81 = ;
+    3 SET : main ( - ) BEGIN KEY quit? UNTIL ;
+    FLUSH
+
+And once more, a simple integration test.
+
+    BYE
+    100 LOAD main .S
+
+You should be able to mash on the keyboard all you want; it should not return to an `ok` prompt until you type a capital `Q`.  Furthermore, the data stack should report as empty.
+
+Normally, we'd end up writing a shadow block now, but this code is so simple, and obviously incomplete, that I'll defer that action until we flesh out the code a bit more.  That way, we minimize the amount of rework that's involved.
+
+### Where Do We Begin?
+
+Now that we have a way of *quitting* the application, how do we *start* it?  Perhaps a more important question, with which glyph do we begin our editing session with?  So far, on block 106, we maintain a single 8-byte buffer (one variable in Kestrel-3 Forth happens to be eight bytes) to hold our glyph's image in.  We even pre-initialize it with some bogus data just to confirm our visualization code continues to work.  However, we've reached a point now where this is no longer feasible.
+
+At this point, I need to talk more about how Kestrel-3 Forth interprets font data in memory.  A font contains 256 glyphs, whether they're used or not.  Each glyph consists of eight bytes of data.  So, a complete font contains 2048 bytes of memory.  We need to allocate at least this much space as a temporary working font for the font editor to work from.  This buffer will replace the `glyph` variable.
+
+Next, we need to adjust how each row of pixels is accessed.  This will involve changing code in block 110.  This is because the Kestrel-3 treats fonts as a **2048x8** pixel bitmap, instead of as a sequential array of 8x8 bitmaps.  The changes are relatively simple, but we must remember to make them.  So, instead of each row of pixels being at sequential addresses, they now appear at 256-byte offsets from each other.  See the figure below for a visual explanation as to why.
+
+![The font bitmap is now wider than a single glyph, so now each row is spaced at 256 bytes.](images/ch2...)
+
+Finally, we need to provide a communications path from the user to the font editor that lets the user select which glyph to edit when starting the font editor.  We'll re-purpose the variable `glyph` for this purpose.
+
+Unfortunately, these changes are not something which can be easily tested interactively.  So, in the event of a defect being introduced, we'll need to rely on some debugging skills or simple logic to figure things out.  However, it's always best to get into the habit of proving the correctness of your code ahead of time as much as you can.  It may take longer to write your programs this way, but it will save immense amounts of time when debugging later.
+
+Let's begin with creating the 2KiB buffer we'll use for temporary storage.
+
+    106 LIST
+    2 OPEN
+    2 SET CREATE fontbuf  2048 ALLOT
+
+Next, we're going to alter our `everything` definition to compute the proper glyph address inside this bitmap.
+
+    3 SET : addr ( c - a ) fontbuf + ;
+    4 SET
+    6 SET
+    7 SET : everything ( - ) PAGE glyph @ addr $FF0000 matrix
+    8 SET     0 0 cursor ;
+
+That should be all we need to get the fatbit code to start drawing the matrix.  Getting to *keep* drawing the right bits in the matrix is the next thing we need to change.
+
+    110 LIST
+    11 SET     1280 + SWAP 256 + SWAP NEXT 2DROP ;
+
+Finally we need to provide a way of "running" the font editor with the provided glyph number.  Let's have it print an error if the glyph number is not valid; otherwise, just set the glyph and invoke `everything` then `main`.
+
+    104 LIST
+    5 SET : design ( n - ) glyph ! everything main ;
+
+We should now be in a position to test everything.
+
+    FLUSH
+    BYE
+    100 LOAD
+    2 design
+
+We should finally have a program that draws a fatbit matrix and a cursor, but which does nothing until you press capital `Q`.
+

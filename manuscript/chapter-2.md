@@ -595,3 +595,173 @@ We should now be in a position to test everything.
 
 We should finally have a program that draws a fatbit matrix and a cursor, but which does nothing until you press capital `Q`.
 
+### Going Mobile -- Supporting Cursor Movement
+
+Right now, our font editor's utility remains quite limited.  No means exists for moving the cursor about the glyph.  I will add the ability to move the cursor in this section.
+
+Instead of relying on SDL- or PS/2-specific keycodes for the arrow keys found on most keyboards, I'm going to stick with using plain ASCII.  For now, let's use `W`, `S`, `A`, and `D` keys for up, down, left, and right movement.  Implementing cursor movement will involve changing three blocks of code.  First, we need to add the lower-level words that actually perform the visual bookkeeping.  Next, we need to enhance the `main` event handler to support more than just quitting the application.  Finally, we need to provide appropriate bindings between the event handler and our lower-level words.  We'll treat the event dispatcher changes in the next section.
+
+We start by implementing the low-level code.  We must recognize that the first-generation Kestrel-3 computer is not a fast computer; we cannot just refresh the entire display and expect good performance.  Instead, it would be better if we rendered the full display, and then *incrementally* updated the display with each input event.  To see how this works, we first render the entire display:
+
+    cursor- everything 0 17 AT-XY cursor+
+
+The words `cursor-` and `cursor+` hide and reveal the text cursor, respectively.  Without these words, cursor-shaped video artifacts will remain, as the Forth interpreter and our application will compete for access to the same pixels.  Your screen should look like this:
+
+![After drawing the whole screen.](images/ch2...)
+
+Notice that the cursor appears at location (0,0) in the matrix.  If we want to move it to location (1,0), for instance, we first must erase the cursor at (0,0), then redraw it at (1,0).
+
+    0 0 cursor  1 0 cursor
+
+The screen should now look like:
+
+![After moving the cursor.](images/ch2...)
+
+Thus, every cursor movement key must first erase the cursor from where it's currently located, then adjust the coordinates, then redraw.
+
+    VARIABLE cx  VARIABLE cy
+    0 cx !  0 cy !
+    : toggle ( - ) cx @ cy @ cursor ;
+    : goL ( - ) toggle  cx @ IF -1 cx +! THEN  toggle ;
+    : goR ( - ) toggle  cx @ 7 < IF 1 cx +! THEN toggle ;
+
+To test what we have so far, let's refresh the display, and try moving the cursor to the right (`goR`) or to the left (`goL`).
+
+    cursor- everything 0 17 AT-XY cursor+
+    goR goR goR ( move to the right 3 places )
+    goL goL goL ( move back )
+    goL goL ( try to go beyond left-hand edge )
+    toggle 7 cx ! toggle
+    goR goR ( try to go beyond right-hand edge )
+    goL
+
+After confirming the above logic works and you still have a functional Forth environment, we now gain the confidence to do the same with the Y coordinate as well.
+
+    : goU ( - ) toggle  cy @ IF -1 cy +! THEN  toggle ;
+    : goD ( - ) toggle  cy @ 7 < IF 1 cy +! THEN  toggle ;
+    0 cx ! 0 cy !
+    cursor- everything 0 17 AT-XY cursor+
+    goD goD goD ( move down 3 places )
+    goU goU goU ( move back up )
+    goU goU ( try to go beyond top edge )
+    toggle 7 cy ! toggle
+    goD goD ( try to go beyond bottom edge )
+    goU
+
+
+Since the logic is so similar to the horizontal movement words, it should be a fairly rote procedure to confirm that the vertical movement words work as intended.  Once this is done, we commit them to block storage.
+
+    106 LIST
+    5 SET VARIABLE cx  VARIABLE cy  VARIABLE glyph
+    8 SET     home toggle ;
+    7 OPEN
+    7 SET : home ( - ) 0 cx ! 0 cy ! ;
+    7 OPEN
+    7 SET : toggle ( - ) cx @ cy @ cursor ;
+
+    112 CLEAN
+    0 SET ( cursor movement   saf2 2016apr22 )
+    2 SET : goL ( - ) toggle  cx @ IF -1 cx +! THEN  toggle ;
+    3 SET : goR ( - ) toggle  cx @ 7 XOR IF 1 cx +! THEN  toggle ;
+    4 SET : goU ( - ) toggle  cy @ IF -1 cy +! THEN  toggle ;
+    5 SET : goD ( - ) toggle  cy @ 7 XOR IF 1 cy +! THEN  toggle ;
+
+    100 LIST
+    7 SET 112 LOAD ( cursor movement )
+
+    FLUSH
+
+Now we test our integration.
+
+    BYE
+    100 LOAD
+    cursor- everything 0 17 AT-XY cursor+ home
+    goR goR
+    goD goD
+    goL goL
+    goU goU
+
+Everything should look pretty good at this point, which now frees us up to going back to consider how we handle event dispatch.
+
+### Revisiting the Main Loop
+
+In this section, we need to implement an event dispatching mechanism that is somewhat more sophisticated than simply checking to see if we're quitting or not.  My strategy for this is to convert key presses into Forth dictionary lookups.  This maps each key (say `Q`) to a specially formatted Forth word (e.g., `$$Q`).  If the word is discovered, it's executed; otherwise, we just ignore the key press.
+
+First, let's test our intuition about finding a word in the dictionary.  We need a workspace to construct words with:
+
+    VARIABLE ws
+    $20242403 ws !
+
+This lays down four bytes into the variable, which form a valid Forth string.  In fact, we should be able to `TYPE` it and get back the following result:
+
+    ws COUNT TYPE CR
+
+![Two dollar signs are expected.](images/ch2...)
+
+Let's define a simple word according to this template:
+
+    : $$A ." Hello world" CR ;
+
+We should be able to locate this word by name:
+
+    : test1 $" $$A" NAME? .S ;
+    test1
+
+We should have two values on the stack; their meaning isn't important now, except for the fact that they should both be non-zero.  This is how we know the word was found.  If we try to find a word which we know hasn't yet been defined, we expect the top item on the stack to be zero.
+
+    : test2 $" $$B" NAME? .S ;
+    2DROP test2
+
+Locating the word based on a key press should now be fairly obvious.  We simply store the keycode into the appropriate place in the `ws` workspace, and then pass it to `NAME?` to find the word.
+
+    : handler ( c -- xt na | ws 0 ) ws 3 + C! ws NAME? ;
+    KEY handler .S
+
+If you type a capital-`A`, you should see that the word is found (non-zero top of stack).  If you press `B`, or some other character, you should find the top of stack zero.
+
+Now that we see how this all works, let's alter our event handling code to make use of the new dispatching logic.  We're just going to rewrite the whole block from scratch, since that takes less effort than incrementally changing things.
+
+    104 CLEAN
+    0 SET ( main event loop   saf2 2016apr22 )
+    2 SET VARIABLE done?   VARIABLE ws
+    3 SET : handler ( c - xt na | ws 0 ) ws 3 + C!  ws NAME? ;
+    4 SET : main ( - ) BEGIN KEY handler IF EXECUTE ELSE DROP THEN
+    5 SET     done? @ UNTIL ;
+    7 SET : design ( n - ) 255 AND glyph !  everything
+    8 SET     0 done? !  $20242403 ws !  main ;
+    10 SET : $$Q ( - ) -1 done? ! ;
+    FLUSH
+
+Now we can test to see if the new event handler works exactly like the old one.
+
+    BYE
+    100 LOAD
+    2 design
+
+You should see the fatbit matrix and the cursor again, and it should not do anything with any key you type *except* for capital `Q`, which should exit the program.
+
+Now that we have this logic implemented, we can now easily express our keyboard mappings for basic cursor movement.
+
+    114 CLEAN
+    0 SET ( keyboard mappings   saf2 2016apr23 )
+    2 SET : $$w ( - ) goU ;
+    3 SET : $$s ( - ) goD ;
+    4 SET : $$a ( - ) goL ;
+    5 SET : $$d ( - ) goR ;
+    7 SET : $$i ( - ) goU ;
+    8 SET : $$k ( - ) goD ;
+    9 SET : $$j ( - ) goL ;
+    10 SET : $$l ( - ) goR ;
+
+    100 LIST
+    8 SET 114 LOAD ( keyboard mappings )
+
+I'm kind of showing off here; I'm mapping `WASD` and `IJKL` to the same cursor movement functions to facilitate left- and right-handed keyboard navigation.  Go ahead and try it out:
+
+    FLUSH
+    BYE
+    100 LOAD
+    2 design
+
+Feel free to play around with the keyboard navigation keys.  Screen update should be quick and snappy.  Press `Q` (capital!) to quit back to Forth.  
+

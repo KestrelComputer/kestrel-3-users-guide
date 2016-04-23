@@ -548,7 +548,7 @@ You should be able to mash on the keyboard all you want; it should not return to
 
 Normally, we'd end up writing a shadow block now, but this code is so simple, and obviously incomplete, that I'll defer that action until we flesh out the code a bit more.  That way, we minimize the amount of rework that's involved.
 
-### Where Do We Begin?
+## Where Do We Begin?
 
 Now that we have a way of *quitting* the application, how do we *start* it?  Perhaps a more important question, with which glyph do we begin our editing session with?  So far, on block 106, we maintain a single 8-byte buffer (one variable in Kestrel-3 Forth happens to be eight bytes) to hold our glyph's image in.  We even pre-initialize it with some bogus data just to confirm our visualization code continues to work.  However, we've reached a point now where this is no longer feasible.
 
@@ -595,7 +595,7 @@ We should now be in a position to test everything.
 
 We should finally have a program that draws a fatbit matrix and a cursor, but which does nothing until you press capital `Q`.
 
-### Going Mobile -- Supporting Cursor Movement
+## Going Mobile -- Supporting Cursor Movement
 
 Right now, our font editor's utility remains quite limited.  No means exists for moving the cursor about the glyph.  I will add the ability to move the cursor in this section.
 
@@ -765,3 +765,69 @@ I'm kind of showing off here; I'm mapping `WASD` and `IJKL` to the same cursor m
 
 Feel free to play around with the keyboard navigation keys.  Screen update should be quick and snappy.  Press `Q` (capital!) to quit back to Forth.  
 
+## Toggling Bits
+
+Ideally, I'd like to use the spacebar to toggle bits in a glyph.  But, this poses a bit of a problem with our current event dispatcher.  The space is what Forth uses to separate words; ergo, it cannot appear *in* a word.  Several approaches exist to remedy this: we could change our `handler` word to use hexadecimal ASCII codes in the words it looks up instead of the actual characters themselves, or we can add custom logic to detect spaces and dispatch accordingly.
+
+The former approach requires changing a lot of lines of code: everything in block 114, and a few in block 104, and whatever is new for dispatching on the space (I figure, two lines of code).  That's less than 32 lines of code for sure; however, I think I can do it in only 4 to 5 lines of code if I just dispatch on the space explicitly.  For this reason, I choose the latter approach.
+
+    104 LIST
+    3 OPEN
+    3 SET : -space ( c - c' ) DUP $20 = IF DROP 95 THEN ;
+    5 SET : main ( - ) BEGIN KEY -space handler IF EXECUTE ELSE DROP THEN
+
+    114 LIST
+    11 SET : $$_ ( - ) 0 17 AT-XY ." Hello world!" CR ;
+    FLUSH
+    BYE
+    100 LOAD
+    0 design
+
+At this point, confirm that the cursor keys still work.  Then, press the spacebar.  You should get a worldly greeting!
+
+Now that we have the spacebar functionality activated, let's make it do something useful.  We know that we want to *toggle* a bit, which just screams for using `XOR` again, just like we did when drawing and erasing the cursor.  Thus, if we're given a memory address for a byte in a glyph, we can affect one of its bits like so (don't type this in; I'm merely illustrating here):
+
+    ( addr mask - ) OVER C@ XOR SWAP C!
+
+We need to compute both the `mask` and the `addr`, based on the current values of the cursor coordinates.
+
+I'm going to start with the `mask`.  We know the cursor location is stored in the variables `cx` and `cy`; `cy` selects which byte in the glyph we want to affect, while `cx` determines which bit.  However, the mapping for bits is backwards from what most other software (and even the hardware) expects.  See figure for an illustration of what I mean.
+
+Generating the `mask`, then, involves shifting the value `1` left by 7 positions if `cx` is 0, 6 if it's 1, etc.  In other words:
+
+    ( addr - ) 1 cx @ 7 XOR LSHIFT
+    ( addr mask - ) OVER C@ XOR SWAP C!
+
+Calculating the address of the byte is similar to computing the address of a byte in the screen's frame buffer.  A single increment of `cy` implies a 256-byte span, so the byte we're interested in working with is *a* + 256\*`cy`, where *a* represents the *base address* of the glyph (byte 0 of the glyph).
+
+    ( base - ) cy @ 256 * +
+    ( addr ) 1 cx @ 7 XOR LSHIFT
+    ( addr mask ) OVER C@ XOR SWAP C!
+
+Finally, we can figure out the value of our glyph's base address by simply adding the address of `fontbuf`, which refers to the first byte of the first glyph, and the current character together.
+
+    ( - ) fontbuf glyph @ +
+    ( base ) cy @ 256 * +
+    ( addr ) 1 cx @ 7 XOR LSHIFT
+    ( addr mask ) OVER C@ XOR SWAP C!
+
+OK, we have a strategy for how to change our bit.  Now let's get to really coding this thing.  First, let's make a word that lets us update a single fatbit, as determined by the `cx` and `cy` variables.  We have a word, `addr` on block 108, which calculates the desired screen address from a coordinate pair.  However, it's shadowed by another `addr` on block 106 later on.  After discovering the former is a useful word with reuse potential, let's rename it to something more meaningful than simply "address."
+
+    108 LIST
+    10 SET : tile ( x y - a ) 1280 * SWAP 2* + $FF0000 + ;
+    12 SET : cursor ( x y - ) cursorImg -ROT tile
+    109 LIST
+    7 SET tile (x y-a) answers the framebuffer address correspond-
+    FLUSH
+
+Be sure to test to make sure everything still works.
+
+    BYE
+    100 LOAD
+    0 design
+    ( cursor around then shift-Q to quit )
+
+
+![What the computer thinks the bits are, versus what the font editor thinks the bits are.](images/ch2...)
+
+We need to translate the coordinate when figuring out which bit to affect.

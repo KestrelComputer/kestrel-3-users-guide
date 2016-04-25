@@ -896,3 +896,296 @@ Test again:
 
 At this point, you should have the ability to toggle bits in the fatbits matrix using the spacebar.  Progress!
 
+## Changing Characters
+
+It would be really inconvenient if the user had to quit the font editor and re-run it from the `ok` prompt whenever he wanted to move to another character.  Particularly when writing games, related groups of characters are often edited together.  For this reason, I want to provide two additional keyboard commands, `[` and `]`, to move to the previous character and to the next character, respectively.
+
+Let's start by writing a simple vocabulary for affecting these changes safely.
+
+    : nextg ( - ) glyph @ 1+ 255 MIN glyph ! ;
+    : prevg ( - ) glyph @ 1- 0 MAX glyph ! ;
+
+We can test that our state remains safe interactively:
+
+    0 glyph !
+    prevg glyph ?   ( should yield 0 )
+    nextg glyph ?   ( should yield 1 )
+
+    255 glyph !
+    nextg glyph ?   ( should yield 255 )
+    prevg glyph ?   ( should yield 254 )
+
+Once we're happy that these words behave as we like, let's store a copy into block storage.
+
+    116 CLEAN
+    0 SET ( character selection   saf2 2016apr24 )
+    2 SET : nextg ( - ) glyph @ 1+ 255 MIN glyph ! ;
+    3 SET : prevg ( - ) glyph @ 1- 0 MAX glyph ! ;
+
+    100 LIST
+    9 OPEN
+    9 SET 116 LOAD ( character selection )
+    FLUSH
+
+The next step is to synchronize the display with the current value of `glyph`.  You may recall a word we wrote on block 110 named `matrix`, which is responsible for drawing the character matrix.  We can re-use that word to render the new fatbits matrix.  Testing this is easy enough.  Use the font editor to create two random, but different, shapes in characters 0 and 1.
+
+    0 design  ( draw something, then Quit )
+    1 design  ( draw something else, then Quit )
+
+We should be able to recall either of these glyphs manually:
+
+    PAGE 0 17 AT-XY
+    fontbuf $FF0000 matrix
+    fontbuf 1+ $FF0000 matrix
+
+Showing each character this way is like using a magnifying glass, so let's create a word named `mag` to automate this process a bit:
+
+    : mag ( - ) glyph @ fontbuf + $FF0000 matrix ;
+
+Now, we can test the interaction between `mag` and either `nextg` or `prevg`:
+
+    0 glyph !  mag
+    nextg mag
+    prevg mag
+
+We want to do this after removing the cursor, and of course, replace the cursor afterwards.  If you look on block 112, there are four other words which follow this pattern (and one on block 114 too).  Looks like we can refactor these to use a common form.  For now, let's focus on the task at hand; we'll consider how to refactor this once we demonstrate basic functionality.
+
+Let's now bind our actions to our command keys.
+
+    116 LIST
+    4 SET : mag ( - ) glyph @ fontbuf + $FF0000 matrix ;
+    5 SET : $$[ ( - ) toggle prevg mag toggle ;
+    6 SET : $$] ( - ) toggle nextg mag toggle ;
+    FLUSH
+
+At this point, we should be ready to test in the context of a running editor.
+
+    BYE
+    100 LOAD
+    0 design
+
+Draw some dots on the first glyph, and then use `]` to advance to the next glyph.  After drawing a few, use `[` to retreat to a previous glyph, preserving its shape.
+
+OK, about cleaning up the code a bit.  On block 112, we have a lot of words are wrapped inside calls to `toggle`.  It'd be nice if we can automate this a bit.  It turns out we can extend Forth in a way that lets us create a word called `behind:`, allowing us to draw *behind* the visible cursor.  It works by manipulating the return stack in a certain way which allows us to execute the remainder of one word before we finish another.  It's not very easy to explain how it works here, but you'll have to trust me that it'll work.
+
+    : rswap ( - ) R> R> SWAP >R >R ;
+    : behind: ( - ) toggle rswap toggle ;
+    : goR ( - ) behind: cx @ 1+ 7 MIN cx ! ;
+    PAGE 0 17 AT-XY
+    0 cx ! 0 cy ! toggle
+    goR goR goR
+
+This new version of `goR` should behave exactly like the original on block 112.  Once we demonstrate its effacacy, let's commit it to block storage:
+
+    112 LIST
+    1 OPEN
+    1 SET : rswap ( - ) R> R> SWAP >R >R ;
+    2 SET : behind: ( - ) toggle rswap toggle ;
+    3 SET : goL ( - ) behind: cx @ 1- 0 MAX cx ! ;
+    4 SET : goR ( - ) behind: cx @ 1+ 7 MAX cx ! ;
+    5 SET : goU ( - ) behind: cy @ 1- 0 MAX cy ! ;
+    6 SET : goD ( - ) behind: cy @ 1+ 7 MAX cy ! ;
+
+    116 LIST
+    5 SET : $$[ ( - ) behind: prevg mag ;
+    6 SET : $$] ( - ) behind: nextg mag ;
+
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+Things should continue to work as before.
+
+## Showing Context
+
+Being able to navigate between characters is a requirement, but it's often the case that you want to see where you are in the greater context of the entire representable character set.  For this reason, I will show the complete character set twice on the screen: one in the system font, and one in the edited font.
+
+I'd like to divide the mid-section of the screen into two pieces, as indicated above.  Since character cell divisions are invisible to the user, we need some kind of helpful ruler to let the user know where the columns and rows of characters line up.  I'd like to draw a rectangle around the glyph currently being edited, so I need space between each character on all sides.
+
+First, let's try to come up with a nice horizontal ruler.  Since the character chart will be expressed as a 16x16 matrix of characters, conveniently, we can use Forth's built-in HEX support for displaying evenly spaced columns with hexadecimal headings.  Note that `.` prints a space *before* the number it prints, which differs from most ANS Forth implementations.  This is an artifact of Kestrel Forth's eForth V1.01 ancestry.
+
+    : 0-F ( - ) 15 FOR R@ 15 XOR . NEXT ;
+    PAGE 0 18 AT-XY HEX 0-F DECIMAL
+
+This should show a nice ruler for one half of the display.  Let's see what it'd look like with both sides.
+
+    PAGE 0 18 AT-XY HEX 0-F 3 SPACES 0-F DECIMAL
+
+That's looking pretty nice, actually.  Now let's see if we can use that gap in the middle to let both halves share a common vertical ruler.
+
+    : horiz ( - ) 0 18 AT-XY 0-F 2 SPACES 0-F ;
+    : vert ( - ) 15 FOR 33 R@ 2* 20 + AT-XY R@ . NEXT ;
+    : axes ( - ) PAGE HEX horiz vert DECIMAL ;
+
+    PAGE HEX horiz vert DECIMAL
+
+That works better than I'd expected, actually.  I think I'll keep it.  So, let's commit this to block storage.
+
+    118 CLEAN
+    0 SET ( character charts    saf 2016apr24 )
+    2 SET : 0-F ( - ) 15 FOR R@ 15 XOR . NEXT ;
+    3 SET : horiz ( - ) 0 18 AT-XY 0-F 2 SPACES 0-F ;
+    4 SET : vert ( - ) 15 FOR 32 R@ 2* 20 + AT-XY R@ . NEXT ;
+    5 SET : axes ( - ) BASE @ HEX horiz vert BASE ! ;
+
+Next, let's produce the actual character charts.  I'm going to make a lot of trial and error seem trivial here and just illustrate the finished sequence of program text you can try to make things work.
+
+    : s ( y x - ) 2* 1+ SWAP 2* 20 + AT-XY ;
+    : u ( y x - ) 2* 35 + SWAP 2* 20 + AT-XY ;
+    : plot ( y x - ) OVER 4 LSHIFT OR !txraw ;
+    : schart ( - ) 15 FOR R@ 15 FOR R@ 2DUP s plot NEXT DROP NEXT ;
+    : uchart ( - ) 15 FOR R@ 15 FOR R@ 2DUP u plot NEXT DROP NEXT ;
+
+    VARIABLE f
+    FONT @ f !
+    : charts ( - ) axes fontbuf FONT ! uchart f @ FONT ! schart ;
+
+    charts
+
+At this point, your screen should look something like this:
+
+![Both custom and system fonts rendered, side by side.](images/ch2...)
+
+Once everything works as planned, let's commit it to block storage.
+
+    118 LIST
+    6 SET : s ( y x - ) 2* 1+ SWAP 2* 20 + AT-XY ;
+    7 SET : u ( y x - ) 2* 35 + SWAP 2* 20 + AT-XY ;
+    8 SET : plot ( y x - ) OVER 4 LSHIFT OR !txraw ;
+    9 SET : schart ( - ) 15 FOR R@ 15 FOR R@ 2DUP s plot NEXT DROP NEXT ;
+    10 SET : uchart ( - ) 15 FOR R@ 15 FOR R@ 2DUP u plot NEXT DROP NEXT ;
+    11 SET FONT @ sysfnt !
+    12 SET : charts ( - ) axes fontbuf FONT ! uchart
+    13 SET     sysfnt @ FONT ! schart ;
+
+    102 LIST
+    5 SET VARIABLE sysfnt
+    6 SET CREATE fontbuf  2048 ALLOT
+
+Now we need to tie everything into the start-up of the program.
+
+    106 LIST
+    9 SET     charts home toggle ;
+    2 CLOSE
+
+    100 LIST
+    6 OPEN
+    6 SET 118 LOAD ( ASCII charts )
+
+And now, it's time to test what we have so far.
+
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+Your display should look like this:
+
+![Editor showing both system and edited fonts.](images/ch2...)
+
+As cool as this is, we still can't *see* which glyph we've selected for editing.  To make this visible to the user, we want to draw a box around the currently selected glyph as a visual cue/reminder to the user.  We'll use a dotted box, since it'll be more visually distinct without being a distraction to the user.
+
+![The dotted box bitmap.](images/ch2...)
+
+    120 CLEAN
+    0 SET ( glyph highlights   saf2 2016apr24 )
+    2 SET CREATE box
+    3 SET   $000000 , $000000 , $A0AA0A , $100000 ,
+    4 SET   $000008 , $100000 , $000008 , $100000 ,
+    5 SET   $000008 , $100000 , $000008 , $100000 ,
+    6 SET   $000008 , $505505 , $000000 , $000000 ,
+
+    FLUSH 120 LOAD
+
+We're going to render the box just like we did the fatbit matrix; however, instead of just blindly storing bytes (which will erase whatever was drawn before), we will `XOR` the image, so that we can later erase the box without disturbing anything inside the box.
+
+    : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
+        1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
+    : rows ( - ) box 15 FOR DUP C@ $FF0000 R@ 80 * + row
+        CELL+ NEXT DROP ;
+
+In this case `p` refers to a set of pixels, and not an address to some pixels.  So, we can test this on the display fairly easily:
+
+    PAGE 0 17 AT-XY
+    rows
+
+The real address for the box, though, should be calculated from the current value of `glyph`.
+
+    : where ( - a ) $FF0000 glyph @ 15 AND 2* +
+        glyph @ 4 RSHIFT 1280 * + ;
+    : rows ( - ) box 15 FOR DUP @ where R@ 80 * + row
+        CELL+ NEXT DROP ;
+
+We can test it:
+
+    $00 glyph !  rows
+    $10 glyph !  rows
+    $01 glyph !  rows
+    $11 glyph !  rows
+
+The only thing is, `where` currently has the wrong base address.  It places the graphic at the upper left-hand corner of the screen, instead of down where the character matrices are.  Now, if we turn that into a variable, we can put it anywhere we want (convenient, since we have two matrices).
+
+So, let's commit to block storage now.
+
+    120 LIST
+    7 SET : where ( - a ) chartbase @ glyph @ 15 AND 2* +
+    8 SET     glyph @ 4 RSHIFT 1280 * + 320 + ;
+    9 SET : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
+    10 SET    1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
+    11 SET : rows ( - ) box 15 FOR DUP @ where R@ 80 * + row
+    12 SET     CELL+ NEXT DROP ;
+
+    102 LIST
+    8 SET VARIABLE chartbase
+
+Now, all we need to do is tie this logic into updating the display, making sure to set `chartbase` to the appropriate (and correct) base address first.
+
+    120 LIST
+    13 SET : shi ( - ) $FF30C0 chartbase ! rows ;
+    14 SET : uhi ( - ) $FF30E2 chartbase ! rows ;
+
+    106 LIST
+    8 SET     charts shi uhi home toggle ;
+
+Let's test how it looks.
+
+    100 LIST
+    7 OPEN
+    7 SET 120 LOAD ( glyph highlights )
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+So far so good; now we just need to make the cursors move when we change the displayed character!
+
+    116 LIST
+    5 OPEN
+    5 SET : w/hilite: ( - ) uhi shi rswap uhi shi ;
+    6 SET : $$[ ( - ) w/hilite: behind: prevg mag ;
+    7 SET : $$] ( - ) w/hilite: behind: nextg mag ;
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+Now, when you use `[` or `]` to navigate glyph selection, you should see the highlight boxes move to inform you of the currently edited glyph.
+
+One thing you might notice is that, although the display now properly updates when you change glyphs, it does not update the characters in the custom font area as you edit a glyph.  This is fairly simple to fix:
+
+    122 CLEAN
+    0 SET ( user-defined character update  saf2 2016apr24 )
+    2 SET : rowa ( - a ) $FF3223 glyph @ 15 AND 2* +
+    3 SET     glyph @ 4 RSHIFT 1280 * +
+    4 SET     cy @ 80 * + ;
+    5 SET : upd ( - ) glyph @ cy @ addr rowa C! ;
+
+    100 LIST
+    12 OPEN
+    12 SET 122 LOAD ( user-defined character update )
+
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+Now, as you edit a glyph, it should update in real-time in the character chart area as well.
+
+![Notice how the glyph in the fatbits area matches the glyph in the character chart area.](images/ch2...)
+

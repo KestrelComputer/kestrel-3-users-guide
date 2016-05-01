@@ -1,28 +1,26 @@
-# Getting to Know Forth
+# Guided Tour: Writing a Font Editor
 
-# TODO: Screenshots for cursor code.
+In this chapter, we will write a non-trivial, but not overly complicated, application in Forth for the Kestrel-3.  Moreover, unlike many open-source hardware projects, we will do this entirely on the Kestrel-3 itself.  This chapter is not directly intended to teach you how to program the Kestrel-3 *per se*; rather, it's an illustration of what it's like to write software in a native Forth environment.
 
-In this chapter, you'll have an understanding of how one typically writes software in Forth for the Kestrel-3, *on* the Kestrel-3.  This chapter is not directly intended to teach you how to program the Kestrel-3; rather, it's an illustration of what it's like to write software in a native Forth environment.  Unlike most programming tutorials, I'm just going to dive right into a non-trivial application: a simple font editor that you can use to make custom character sets.
+If you're looking for tutorials on learning Forth in general, you might find the book [Starting Forth, by Leo Brodie](https://www.forth.com/starting-forth/) of particular interest.  The copy I linked to above targets [Forth, Inc.'s SwiftForth](https://www.forth.com/product/swiftforth/); thus, some things will be different for Kestrel-3 Forth, particularly since its foundation, eForth, pre-dates the ANSI Forth standard.
 
-It's not terribly complicated as applications go; but, it will touch many of the facilities of the Kestrel-3 on different levels of abstraction, and will introduce everything from the most basic to some moderately advanced Forth programming idioms that you might not have thought possible from reading other chapters of this book.
+The font editor we describe in this chapter will touch many of the facilities of the Kestrel-3 on different levels of abstraction, and will introduce everything from the most basic to some moderately advanced Forth programming idioms that you might not have seen elsewhere in this book.
 
-The program is presented in a manner that allows you to type in the program step by step and to follow along.  It's perfectly OK if you don't get things the first time around; feel free to revisit this chapter again later.  As always, if you have questions which I'm not answering, or if you feel this chapter can be improved, feel free to open a Github issue at [https://github.com/kestrelcomputer/kestrel/issues](https://github.com/kestrelcomputer/kestrel/issues).
+The program is presented in a manner that allows you to type in the program step by step and to follow along.  It's perfectly OK if you don't get things the first time around; feel free to revisit this chapter again later.
 
-If you intend on following along, it's best if you insert a *blank* SD card into the Kestrel-3's SD card slot.  This way, you won't have to worry about following the instructions and risking ruining data on an existing SD card.  If you're running the emulator, you can "insert" a card simply by creating a file named `sdcard.sdc` in the same directory that you're running the emulator from.  On Ubuntu Linux, you can do this with the command `touch sdcard.sdc` *before* launching the emulator, like so:
+If you intend on following along, it's best if you insert a *blank* SD card into the Kestrel-3's SD card slot.  This way, you won't have to worry about following the instructions and risking ruining data on an existing SD card.  If you're running the `e` emulator, you can "insert" a card simply by creating a file named `sdcard.sdc` in the same directory that you're running the emulator from.  On Ubuntu Linux, you can do this with the command `touch sdcard.sdc` *before* launching the emulator, like so:
 
     rm -f sdcard.sdc
     dd if=/dev/zero of=sdcard.sdc bs=1024 count=200
     bin/e romfile roms/forth
 
-## Block Storage
+## Block Storage vs. Files
 
-You may be familiar with other programming environments in older home computers, such as their many dialects of BASIC, or you may be familiar with programming on today's enterprise-quality environments, using languages as sophisticated as C#, C++, Java, etc.  The one thing these languages all have in common is the concept of the *file*, an arbitrarily long sequence of secondary storage in which you store a program.
+After turning on your Kestrel-3, you might be surprised to find that there's no equivalent of a Unix- or Windows-like command-line environment.  You cannot fetch the directory of the SD card, nor can you create or dispose of named files.  That is because these concepts do not exist in Kestrel Forth as of this writing.
 
-In these environments, you tend to enter your program using some kind of *editor*, typically as one or more modules, which you then save with a single action (e.g., selecting **Save** from a menu, or typing `SAVE "MY PROGRAM",8` or the like).  Today, even many dialects of Forth prefer this style of programming, since it lets the compiler take advantage of the tooling and filing systems available to the host operating system.
+With file-based environments, you tend to enter your program using some kind of *editor*, typically as one or more modules, which you then save with a single action (e.g., selecting **Save** from a menu, or typing `SAVE "MY PROGRAM",8` or the like).  Today, even many dialects of Forth prefer this style of programming, since it lets the compiler take advantage of the tooling and filing systems available to the host operating system.  Unfortunately, the Kestrel-3's firmware is currently a minimally viable product: it represents only the smallest subset of a luxurious computing environment.  Despite its limitations, however, you can still get quite a bit of stuff done!
 
-Since the Kestrel-3 currently lacks a file-capable operating system in its system ROM[^define_rom], an alternative method of storing Forth applications is required.  We do this using something called *block storage*.  Blocks are also known as *screens*, particularly when used to store Forth programs.
-
-[^define_rom]: Read-Only Memory.  This is the kind of memory which the Kestrel-3 can rely on retaining its contents even when power is disconnected from the computer.
+Since the Kestrel-3 currently lacks a file-capable operating system in its system ROM, an alternative method of storing Forth applications is required.  We do this using something called *block storage*.  Blocks are also known as *screens*, particularly when used to store Forth programs.
 
 A single block stores exactly 1024 bytes, or 1 *kilobyte* of memory (in our case, to the mounted SD card).  They are identified by number, from 1 to however many may fit on your particular SD card.  The programmer typically maintains an awareness of which ranges of blocks are used by which programs or which data files.
 
@@ -35,7 +33,9 @@ You should see Forth respond with `ok` after it finishes each command.  The firs
 
 ![Preparing for your first screen of source code.](images/ch2.100clean.png)
 
-Let's provide this block with a title (useful for when we run `INDEX`, which I'll explain later), and a command to load another block.  Do not worry about how I chose this other block; honestly, it's arbitrary.  It also, at this point at least, doesn't matter that we haven't provided any source code for this other block yet, because we'll just `CLEAN` it later first.
+The first and most important block of code we'll write for any application, including the font editor, is what's called the `LOAD` block.  This is the top-level definition of what the program is.  It makes plain the composition of the program in memory.  For particularly large programs, one `LOAD` block might invoke others.  For us, though, we can get away with just one.
+
+Let's provide this block with a title (useful for when we run `INDEX`, used to get a summary of what a range of blocks contain), and a command to load another block.  Do not worry about how I chose this other block; honestly, it's arbitrary.  It also, at this point at least, doesn't matter that we haven't provided any source code for this other block yet, because we'll just `CLEAN` it later first.
 
     0 SET ( Chapter 2 Font Editor   saf2 2016apr17 )
     2 SET MARKER empty
@@ -47,14 +47,14 @@ Now, if you type `100 LIST` again, you should see the program you entered so far
 
 A font is, in its most basic form, a collection of glyphs.  Each glyph describes how the character it represents appears to the human viewer.  The Kestrel's system font consists of 256 fixed, eight-pixel by eight-pixel matrices of on or off bits.
 
-You might have heard the term "byte" before, but never really understood what it meant on a concrete level.  A byte is simply eight bits.  A bit, then, is an on/off value, stored in numerical form as either a 1 or a 0.  This combination of bits allows us to represent numbers, text, etc.  The interpretation, really, is entirely context dependent.  This is important to us because of how we exploit this fact to render text on the screen.  Below, you'll find a blown-up example of what I mean.  It's the letter A itself, represented both in terms of on/off pixels, and the corresponding hexadecimal and decimal representation.
+Below, you'll find a blown-up example of what I mean.  It's the letter A itself, represented both in terms of on/off pixels, and the corresponding hexadecimal and decimal representation.
 
 {id="ch2_img_glyphA"}
 ![The glyph for the letter A.](images/ch2.glyphA.png)
 
-What we want our font editor to do, ultimately, is render a character in "fat bits", approximating the graph on the left-hand side above, where it's easier for us to see and later manipulate.  We don't really care about the corresponding hexadecimal or even their decimal values.  That's something for the computer to worry about.
+What we want our font editor to do, ultimately, is render a character in the "fat-bits" matrix, approximating the graph on the left-hand side above, where it's easier for us to see and later manipulate.  We don't really care about the corresponding hexadecimal or even their decimal values.  That's something for the computer to worry about.
 
-### White Fat Bits
+### White Fat-Bits
 
 The most fundamental thing we have is "the bit."  It's either on (1) or off (0).  On bits render as white on the screen, so we're going to recreate that in the fat-bits magnification as well.  So, let's write a simple program to render a bit that is "on".  I'm going to zoom in by a factor of 16; meaning, each pixel in a character will now occupy a 16 pixel rectangle on the screen.  Since rectangles aren't fundamental objects, let's break this down even further.
 
@@ -85,7 +85,7 @@ All that typing is getting laborious though, so let's tell Forth to remember wha
 
 There are some more language elements to discuss here.  The `:` symbol tells Forth that we're interested in creating a new word.  The name of the word follows immediately; in this case `row`, as in row of pixels.
 
-The stuff between the parentheses is a *comment*; its purpose is to inform the programmer of some relevant information about the word; it has zero effect on the meaning of the Forth program itself.  In this case, we're illustrating a "stack effect diagram," or more simply, "stack effect."  This is saying to whoever is reading the code, in a symbolic way, that we're accepting an address `a`, and returning another address `a'`.  It's not stated in this comment that `a' > a` or that `a' = a+80`, because it's obvious from context what the result should be.  Reading the line of source, we see that `a'` should be larger than `a` by 80.  Another reason who know this must be true is because of the context in which we intend on using `row`, namely to affect graphics on the screen.  We'll talk more about stack effects elsewhere.
+The stuff between the parentheses is a *comment*; its purpose is to inform the programmer of some relevant information about the word; it has zero effect on the meaning of the Forth program itself.  In this case, we're illustrating a "stack effect diagram," or more simply, "stack effect."  This is saying to whoever is reading the code, in a symbolic way, that we're accepting an address `a`, and returning another address `a'`.  It's not stated in this comment that `a' > a` or that `a' = a+80`, because it's obvious from context what the result should be.  Reading the line of source, we see that `a'` should be larger than `a` by 80.  Another reason we know this must be true is because of the context in which we intend on using `row`, namely to affect graphics on the screen.  We'll talk more about stack effects elsewhere.
 
 `;` tells the compiler when to *stop* the compilation, and identifies the official end of the definition.
 
@@ -102,7 +102,7 @@ Why only `15` in the program?  That's because `FOR` counts down towards, and inc
 You should see a big white rectangle in the upper-lefthand corner of the screen.  This proves to us that the code works as intended; of course, it's fixed to that corner, so we'll need to change this code later.  But, for now, let's commit this to block 110 before we lose it.
 
     110 CLEAN
-    0 SET ( Fatbits rendering   saf2 2016apr17 )
+    0 SET ( Fat-bits rendering   saf2 2016apr17 )
     2 SET : row ( a - a' ) -1 OVER H! 80 + ;
     3 SET : on ( - ) $FF0000 15 FOR row NEXT DROP ;
 
@@ -124,9 +124,9 @@ We should, again, see a white rectangle in the upper-lefthand corner of the scre
 
 ![Drawing a white fat-bit.](images/ch2.fatbit.white.png)
 
-### Black Fat Bits
+### Black Fat-Bits
 
-We turn our attention now to representing those bits which are turned *off*.  Referring back to [the figure of the glyph for the letter A](#ch2_img_glyphA), note how despite the dark squares imply dark dots on the screen, we can still see the grid lines in the figure.  We similarly want some kind of visual cue on the screen when representing fat bits for dark pixels.
+We turn our attention now to representing those bits which are turned *off*.  Referring back to [the figure of the glyph for the letter A](#ch2_img_glyphA), note how despite the dark squares imply dark dots on the screen, we can still see the grid lines in the figure.  We similarly want some kind of visual cue on the screen when representing fat-bits for dark pixels.
 
 What we need to do is render the edges of a simple rectangle, like so:
 
@@ -168,9 +168,9 @@ Anyway, you should see something like the following:
 
 ![Drawing a black fat-bit.](images/ch2.fatbit.black.png)
 
-### Rows of Fat Bits
+### Rows of Fat-Bits
 
-At this point, we have a means of drawing a single white or black fat bit in the upper left-hand corner of the display.  But, what we'd really like is to draw a complete matrix of them.  A matrix is an array of arrays, of course, so it seems logical that our next step is to simply get an array of fat bits up on the screen first.
+At this point, we have a means of drawing a single white or black fat-bit in the upper left-hand corner of the display.  But, what we'd really like is to draw a complete matrix of them.  A matrix is an array of arrays, of course, so it seems logical that our next step is to simply get an array of fat-bits up on the screen first.
 
 I need a plan to go about doing this.  I won't go into the different approaches I've considered here; this chapter is already quite long as it is.  Instead, I'll just invoke the power of successive refinement and iterative programming.
 
@@ -231,14 +231,25 @@ Whoa, hold up!  I'm redefining `row` on line 9.  How is this supposed to work?  
 
 **This is why you hear the word *context* so frequently in Forth programming.**  It's clear that, by the time line 9 rolls around, the *context* for what a row of pixels *means* has changed.  We simply make this known to Forth in the most natural way possible; we simply *redefine* it as we need it, *when* we need it.
 
-Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by various flavors of Lisp, if you were to change the meaning of `row` like this (in some made-up dialect of Lisp):
+Contrast this with virtually any other language you're likely to come into contact with.  Particularly illustrated by, just to pick one, Javascript, if you were to change the meaning of `row` like this (in some made-up dialect of Lisp):
 
-    (define (row ...) ...definition 1...)
-    (define (on addr) (times 16 (let (addr (row addr)))))
-    ... some more code here ...
-    (define (row ...) ...definition 2...)
+    function row() {
+      console.log("Row 1 called.");
+    };
 
-then the meaning of `(on x)` would fundamentally change.  Were you to do this in a more statically controlled language like C, you'll just get a compile-time error for duplicately defined symbols.
+    function box() {
+      for(i = 0; i < 16; i++) {
+        row();
+      };
+    };
+
+    function row() {
+      console.log("Row 2 called.");
+    };
+
+then the meaning of `box()` would fundamentally change (instead of printing sixteen `Row 1 called.` messages, it now prints `Row 2 called.` messages instead).  Were you to do this in a more rigorous compiled language like C, you'll just get a compile-time error for duplicately defined symbols.
+
+In either case, you're *forced* to name everything uniquely, even disposable concepts.  With Forth, you are not compelled to do so.
 
 Anyway, we can prove that this works easily enough:
 
@@ -273,7 +284,7 @@ Whoops; I forgot to swap the bytes due to the MGIA's big-endian accesses to memo
 
 This block is starting to look pretty full, so I think we'll end it there.  Really, the whole purpose of this block is to render the matrix, so let's update the index title accordingly.
 
-    0 SET ( Fatbits: matrix   saf2 2016apr17 )
+    0 SET ( Fat-bits: matrix   saf2 2016apr17 )
     FLUSH
     110 LIST
 
@@ -308,7 +319,7 @@ These kinds of screens are historically known as *shadow blocks*.  They contain 
 
 ## Your Move: Prompting the User with a Cursor
 
-We've gotten a reasonable facsimile of the graph to show on the screen.  But, now, let's add a *cursor* so that we can indicate which cell on the fatbit grid to change.
+We've gotten a reasonable facsimile of the graph to show on the screen.  But, now, let's add a *cursor* so that we can indicate which cell on the fat-bit grid to change.
 
 OK, more specifications.  There are several approaches we can take to accomplish this goal, but once again, I'm going to compact my thought process down for the sake of shortening an already lengthy chapter.
 
@@ -333,7 +344,7 @@ I think it'd be nice to have a small, grey dot in the middle of a cell to indica
 ................  0000  0000
 
 
-I like this design, because it leaves a large portion of the cell visible to the user, while still providing a visual cue to the user which cell is currently referenced by the program.  Other options include cross-hairs, an arrow shape, etc.  As we'll soon see, this is actually one of the simpler patterns to render.
+I like this design, because it leaves a large portion of the cell visible to the user, while still providing a visual cue to the user which cell is currently referenced by the program.  Other options include cross-hairs, an arrow shape, etc.
 
 I've also converted the bitmap pattern into hexadecimal values both for human consumption (middle column), and in the proper format expected by the MGIA hardware (right-most column).  We'll be using the latter column later.
 
@@ -347,14 +358,15 @@ First, we start out with defining our bitmap data.
     0 , 0 , 0 , 0 , $A00A , $5005 , $A00A , $5005 ,
     $A00A , $5005 , $A00A , $5005 , 0 , 0 , 0 , 0 ,
 
-Next, I'll make a word that "paints" the cursor, line by line, just like we did with the fatbit.  We know in this case that it must accept two addressses (one for our cursor image, and one for the framebuffer), and it should leave two addresses on the stack (same thing, suitably adjusted) so we can just run the same word again and again until the cursor has been rendered.
+Next, I'll make a word that "paints" the cursor, line by line, just like we did with a fat-bit.  We know in this case that it must accept two addressses (one for our cursor image, and one for the framebuffer), and it should leave two addresses on the stack (same thing, suitably adjusted) so we can just run the same word again and again until the cursor has been rendered.
 
-Unlike painting the fatbits, though, we want each on-bit in our cursor image to *toggle* the on-screen bit on or off.  Off bits should cause no action to take place.  It turns out there's a logical operator called *exclusive-OR* (`XOR`) which does this for us.  As you might imagine, `H@` is the compliment to `H!`, where it reads a 16-bit quantity from memory (*half-word fetch*).
+Unlike painting the fat-bits, though, we want each on-bit in our cursor image to *toggle* the on-screen bit on or off.  Off bits should cause no action to take place.  It turns out there's a logical operator called *exclusive-OR* (`XOR`) which does this for us.  As you might imagine, `H@` is the compliment to `H!`, where it reads a 16-bit quantity from memory (*half-word fetch*).
 
     : row ( c a - c' a' ) OVER @ OVER H@ XOR OVER H! 80 + SWAP CELL+ SWAP ;
 
 We can test it out like so:
 
+    PAGE 0 17 AT-XY
     cursorImg $FF0000
     row row row row
     row row row row
@@ -380,8 +392,12 @@ We see that it works, so let's commit this to block storage for future use.
 We can make sure everything still works by testing the program so far:
 
     BYE
+    PAGE 0 17 AT-XY
     108 LOAD
-    cursorImg $FF0000 row row row row row row row row row row row row
+    cursorImg $FF0000
+    row row row row
+    row row row row
+    row row row row
 
 That should work well enough to render the cursor onto the sreen.  If so, let's link it into our font editor program.
 
@@ -393,7 +409,7 @@ That should work well enough to render the cursor onto the sreen.  If so, let's 
 
 The cursor doesn't serve much purpose if it's just stuck in one spot on the screen; there needs to be a way to actually move it around.  So, our next step is to adjust the code we've written so far so that we can place it anywhere on our matrix.
 
-We know the fatbit matrix is 8 wide and 8 tall, so it seems reasonable that we should make some kind of mathematical formula that translates a pair of small integers into a screen address.  `cursor` already accepts a screen address, so there is no need to change `cursor` itself.
+We know the fat-bit matrix is 8 wide and 8 tall, so it seems reasonable that we should make some kind of mathematical formula that translates a pair of small integers into a screen address.  `cursor` already accepts a screen address, so there is no need to change `cursor` itself.
 
 We know that each cell is two bytes wide, so it seems reasonable that we multiply `x` by two and add to some base address.  Let's write that first, since that should be pretty simple to get working.
 
@@ -418,18 +434,25 @@ The first three prints establish the pattern we want to see; with each increasin
 
 Let's try rendering the cursor in the 3rd place over to the right, just to get a feel of how everything is supposed to fit together:
 
-    cursorImg 3 addr row row row row row row row row row row row row
+    PAGE 0 17 AT-XY
+    cursorImg 3 addr
+    row row row row
+    row row row row
+    row row row row
 
 ![Cursor appears to the right.](images/ch2...)
 
-It's now time to consider the `y` coordinate, or the vertical axis.  Like the horizontal axis, we are going to constrain it to the values 0 to 7 inclusive elsewhere in the code.  But, our address computation is different.  Each fatbit cell is 16 pixels tall, and as we recall from before, each row on the screen consists of 80 bytes.  So, each row of the fatbit matrix consists of 1280 bytes of memory.  So, let's account for that in our definition of `addr` now:
+It's now time to consider the `y` coordinate, or the vertical axis.  Like the horizontal axis, we are going to constrain it to the values 0 to 7 inclusive elsewhere in the code.  But, our address computation is different.  Each fat-bit cell is 16 pixels tall, and as we recall from before, each row on the screen consists of 80 bytes.  So, each row of the fat-bit matrix consists of 1280 bytes of memory.  So, let's account for that in our definition of `addr` now:
 
     : addr ( x y - a ) 1280 * SWAP 2* + $FF0000 + ;
 
 As you can see, the effective address computation is a bit more complex, but not terribly so.  We first account for the `y` coordinate, then tackle the `x` coordinate separately and add them together.  Once we have our relative offset, we add the base address of the screen, and that's our final address for the cursor.  Let's test it.
 
     PAGE 0 17 AT-XY
-    cursorImg 3 4 addr row row row row row row row row row row row row
+    cursorImg 3 4 addr
+    row row row row
+    row row row row
+    row row row row
 
 ![The cursor can now be placed vertically too.](images/ch2...)
 
@@ -464,7 +487,7 @@ Looks like we have completed our cursor drawing program, so now it's time to upd
     5 SET     buffer if and only if corresponding bits in the
     6 SET     cursor bitmap are set.  Adjusts pointers.
     7 SET addr (x y-a) answers the framebuffer address correspond-
-    8 SET     ing to the specified coordinate in the fatbit
+    8 SET     ing to the specified coordinate in the fat-bit
     9 SET     matrix.
     10 SET cursor (x y-) draws or undraws (if called again) the
     11 SET     cursor image at the designated place on the fat-
@@ -473,7 +496,7 @@ Looks like we have completed our cursor drawing program, so now it's time to upd
 
 ### Making Sure It All Works Together
 
-A final test is to make sure that our fatbits matrix code and our cursor rendering code actually works together.  There's no obvious reason why they should interfere; however, computer software has a nasty habit of surprising the author in this respect.
+A final test is to make sure that our fat-bits matrix code and our cursor rendering code actually works together.  There's no obvious reason why they should interfere; however, computer software has a nasty habit of surprising the author in this respect.
 
 We'd like to create a simple glyph buffer, display it, and present the cursor in its home position (0,0).  That should be enough for now.
 
@@ -483,7 +506,7 @@ We'd like to create a simple glyph buffer, display it, and present the cursor in
 
 The result should look somewhat like this:
 
-![Confirming that the fatbit viewing code and the cursor display works together.](images/ch2...)
+![Confirming that the fat-bit viewing code and the cursor display works together.](images/ch2...)
 
 Once we know that it does, let's commit it to block storage.
 
@@ -503,7 +526,7 @@ We should now be able to test that it integrates nicely:
     BYE
     100 LOAD everything
 
-After a few seconds, the screen should look like before, with a simple fatbits matrix and a cursor in position (0,0).  The only difference is the `OK` prompt will partially overwrite the results.
+After a few seconds, the screen should look like before, with a simple fat-bits matrix and a cursor in position (0,0).  The only difference is the `OK` prompt will partially overwrite the results.
 
 When we're happy with that, let's not forget to update our shadow documentation.
 
@@ -552,15 +575,17 @@ Normally, we'd end up writing a shadow block now, but this code is so simple, an
 
 Now that we have a way of *quitting* the application, how do we *start* it?  Perhaps a more important question, with which glyph do we begin our editing session with?  So far, on block 106, we maintain a single 8-byte buffer (one variable in Kestrel-3 Forth happens to be eight bytes) to hold our glyph's image in.  We even pre-initialize it with some bogus data just to confirm our visualization code continues to work.  However, we've reached a point now where this is no longer feasible.
 
-At this point, I need to talk more about how Kestrel-3 Forth interprets font data in memory.  A font contains 256 glyphs, whether they're used or not.  Each glyph consists of eight bytes of data.  So, a complete font contains 2048 bytes of memory.  We need to allocate at least this much space as a temporary working font for the font editor to work from.  This buffer will replace the `glyph` variable.
+At this point, I need to talk more about how Kestrel-3 Forth interprets font data in memory.  A font always contains 256 glyphs, whether they're used or not.  Each glyph consists of eight bytes of data.  So, a complete font contains 256 \* 8 = 2048 bytes of memory.  We need to allocate at least this much space as a temporary working font for the font editor to work from.  This buffer will replace the `glyph` variable.
 
-Next, we need to adjust how each row of pixels is accessed.  This will involve changing code in block 110.  This is because the Kestrel-3 treats fonts as a **2048x8** pixel bitmap, instead of as a sequential array of 8x8 bitmaps.  The changes are relatively simple, but we must remember to make them.  So, instead of each row of pixels being at sequential addresses, they now appear at 256-byte offsets from each other.  See the figure below for a visual explanation as to why.
+Next, we need to adjust how each row of pixels is accessed.  This will involve changing code in block 110.  This is because the Kestrel-3 treats fonts as a single **2048x8** pixel bitmap, instead of as a sequential array of 8x8 bitmaps.  See the following figure to see how these are different.
 
 ![The font bitmap is now wider than a single glyph, so now each row is spaced at 256 bytes.](images/ch2...)
 
+The changes are relatively simple, but we must remember to make them.  So, instead of each row of pixels being at sequential addresses, they now appear at 256-byte offsets from each other.
+
 Finally, we need to provide a communications path from the user to the font editor that lets the user select which glyph to edit when starting the font editor.  We'll re-purpose the variable `glyph` for this purpose.
 
-Unfortunately, these changes are not something which can be easily tested interactively.  So, in the event of a defect being introduced, we'll need to rely on some debugging skills or simple logic to figure things out.  However, it's always best to get into the habit of proving the correctness of your code ahead of time as much as you can.  It may take longer to write your programs this way, but it will save immense amounts of time when debugging later.
+Unfortunately, these changes are not something which can be easily tested interactively.  So, in the event of a defect being introduced, we'll need to rely on some debugging skills or simple logic to figure things out.  However, it's always best to get into the habit of proving the correctness of your code ahead of time as much as you can.  It will take longer to write your programs this way, but it will save immense amounts of time when debugging later.
 
 Let's begin with creating the 2KiB buffer we'll use for temporary storage.
 
@@ -576,15 +601,15 @@ Next, we're going to alter our `everything` definition to compute the proper gly
     7 SET : everything ( - ) PAGE glyph @ addr $FF0000 matrix
     8 SET     0 0 cursor ;
 
-That should be all we need to get the fatbit code to start drawing the matrix.  Getting to *keep* drawing the right bits in the matrix is the next thing we need to change.
+That should be all we need to get the fat-bit code to start drawing the matrix.  Getting it to *continue* drawing the right bits in the matrix is the next thing we need to change.
 
     110 LIST
     11 SET     1280 + SWAP 256 + SWAP NEXT 2DROP ;
 
-Finally we need to provide a way of "running" the font editor with the provided glyph number.  Let's have it print an error if the glyph number is not valid; otherwise, just set the glyph and invoke `everything` then `main`.
+Finally we need to provide a way of "running" the font editor with the provided glyph number.  We'll just set the lowest 8-bits of the glyph and invoke `everything` then `main`.
 
     104 LIST
-    5 SET : design ( n - ) glyph ! everything main ;
+    5 SET : design ( n - ) 255 AND glyph ! everything main ;
 
 We should now be in a position to test everything.
 
@@ -593,7 +618,7 @@ We should now be in a position to test everything.
     100 LOAD
     2 design
 
-We should finally have a program that draws a fatbit matrix and a cursor, but which does nothing until you press capital `Q`.
+We should finally have a program that draws a fat-bit matrix and a cursor, but which does nothing until you press capital `Q`.
 
 ## Going Mobile -- Supporting Cursor Movement
 
@@ -635,7 +660,7 @@ To test what we have so far, let's refresh the display, and try moving the curso
     goR goR ( try to go beyond right-hand edge )
     goL
 
-After confirming the above logic works and you still have a functional Forth environment, we now gain the confidence to do the same with the Y coordinate as well.
+After confirming the above logic works, we now gain the confidence to do the same with the Y coordinate as well.
 
     : goU ( - ) toggle  cy @ IF -1 cy +! THEN  toggle ;
     : goD ( - ) toggle  cy @ 7 < IF 1 cy +! THEN  toggle ;
@@ -647,7 +672,6 @@ After confirming the above logic works and you still have a functional Forth env
     toggle 7 cy ! toggle
     goD goD ( try to go beyond bottom edge )
     goU
-
 
 Since the logic is so similar to the horizontal movement words, it should be a fairly rote procedure to confirm that the vertical movement words work as intended.  Once this is done, we commit them to block storage.
 
@@ -738,7 +762,7 @@ Now we can test to see if the new event handler works exactly like the old one.
     100 LOAD
     2 design
 
-You should see the fatbit matrix and the cursor again, and it should not do anything with any key you type *except* for capital `Q`, which should exit the program.
+You should see the fat-bit matrix and the cursor again, and it should not do anything with any key you type *except* for capital `Q`, which should exit the program.
 
 Now that we have this logic implemented, we can now easily express our keyboard mappings for basic cursor movement.
 
@@ -785,7 +809,7 @@ The former approach requires changing a greater number of lines of code: everyth
 
 At this point, confirm that the cursor keys still work.  Then, press the spacebar.  You should get a worldly greeting!
 
-Now that we have the spacebar functionality activated, let's make it do something useful.  We know that we want to *toggle* a bit, which just screams for using `XOR` again, just like we did when drawing and erasing the cursor.  Thus, if we're given a memory address for a byte in a glyph, we can affect one of its bits like so (don't type this in; I'm merely illustrating here):
+Now that we have the spacebar functionality activated, let's make it do something useful.  We know that we want to *toggle* a bit, which just screams for using `XOR` again, just like we did when drawing and erasing the cursor.  Thus, if we're given a memory address for a byte in a glyph, we can affect one of its bits like so:
 
     : flip ( a m - ) OVER C@ XOR SWAP C! ;
 
@@ -894,7 +918,7 @@ Test again:
     100 LOAD
     0 design
 
-At this point, you should have the ability to toggle bits in the fatbits matrix using the spacebar.  Progress!
+At this point, you should have the ability to toggle bits in the fat-bits matrix using the spacebar.  Progress!
 
 ## Changing Characters
 
@@ -927,7 +951,7 @@ Once we're happy that these words behave as we like, let's store a copy into blo
     9 SET 116 LOAD ( character selection )
     FLUSH
 
-The next step is to synchronize the display with the current value of `glyph`.  You may recall a word we wrote on block 110 named `matrix`, which is responsible for drawing the character matrix.  We can re-use that word to render the new fatbits matrix.  Testing this is easy enough.  Use the font editor to create two random, but different, shapes in characters 0 and 1.
+The next step is to synchronize the display with the current value of `glyph`.  You may recall a word we wrote on block 110 named `matrix`, which is responsible for drawing the character matrix.  We can re-use that word to render the new fat-bits matrix.  Testing this is easy enough.  Use the font editor to create two random, but different, shapes in characters 0 and 1.
 
     0 design  ( draw something, then Quit )
     1 design  ( draw something else, then Quit )
@@ -1096,7 +1120,7 @@ As cool as this is, we still can't *see* which glyph we've selected for editing.
 
     FLUSH 120 LOAD
 
-We're going to render the box just like we did the fatbit matrix; however, instead of just blindly storing bytes (which will erase whatever was drawn before), we will `XOR` the image, so that we can later erase the box without disturbing anything inside the box.
+We're going to render the box just like we did the fat-bit matrix; however, instead of just blindly storing bytes (which will erase whatever was drawn before), we will `XOR` the image, so that we can later erase the box without disturbing anything inside the box.
 
     : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
         1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
@@ -1187,5 +1211,179 @@ One thing you might notice is that, although the display now properly updates wh
 
 Now, as you edit a glyph, it should update in real-time in the character chart area as well.
 
-![Notice how the glyph in the fatbits area matches the glyph in the character chart area.](images/ch2...)
+![Notice how the glyph in the fat-bits area matches the glyph in the character chart area.](images/ch2...)
+
+## Conveniences
+
+At this point, the font editor, as a distinct program, basically is complete.  You can edit any glyph, you can tell which glyph you're editing, and the display always reflects the current state of the character set.
+
+How do you import or export a character set for use in other programs though?  How do you handle interruptions in your editing session?  Finally, how do you use a font you designed for your Forth session?
+
+### Recovering From an Interruption
+
+Let's say you're editing a character set, and suddenly, you need to perform a calculation.  You cannot enter arbitrary Forth commands while editing, so you need to quit the font editor with the `Q` command to return to Forth first.  It would be nice to come back into the font editor later without having to explicitly remember which glyph you left off at.  That is the topic of this change.
+
+Most of the work is already done for us, actually.  If you `104 LIST` and review the `design` definition, you'll see that the first thing we do is store our desired glyph into the `glyph` variable, then we refresh the display and enter our main event loop.  All we need to do is split that definition into two words.  We'll keep `design`'s interface as-is.  We'll refactor everything after changing `glyph` into a separate word that we can invoke separately.
+
+    104 LIST
+    8 OPEN
+    8 SET : editor ( - ) everything 0 done? ! $20242403 ws ! main ;
+    9 SET : design ( n - ) 255 AND glyph ! editor ;
+    10 CLOSE
+
+As usual, we test to see if this works:
+
+    FLUSH BYE
+    100 LOAD
+    5 design
+
+Cursor around, draw some stuff, and use `[` and `]` to change glyphs.  For the sake of this section, let's say you decide to strike `Q` when you're editing glyph 10.  Then, you should be able to type:
+
+    editor
+
+and return to the editor, as if you'd never left.
+
+### Saving and Loading Fonts
+
+I now turn my attention to the minor detail of saving your work.  Imagine using this relatively simple font editor for several hours to work up a bunch of glyphs for use in a game, only to have the power go out just as you're on the very last glyph.  Or not; suppose you want to turn the Kestrel off and return to your work later.  How do you restore your work?
+
+Saving should be as simple as copying the contents of the font buffer `fontbuf` into block storage, starting at some arbitrary block provided by the user.  Since a font takes up 2KB of memory, it follows that fonts will require two blocks of storage for this to work.
+
+    FLUSH BYE  ( start with a clean copy of our program in memory )
+    100 LOAD
+
+    : n ( ofs n - ) BLOCK UPDATE SWAP fontbuf + SWAP 1024 CMOVE ;
+    : store ( n - ) 1024 OVER 1+ n  0 SWAP n  FLUSH ;
+
+Note that we enforce flushing as a convenience.  Let's test it first executing `0 design`, and making the glyph look as follows:
+
+![This glyph shape lets us confirm proper operation of the `store` procedure.](images/ch2...)
+
+Press `Q`, and then type:
+
+    200 store
+
+At this point, you should see some SD card activity for about a second or so.  We can confirm that things were stored properly by resetting the system and inspecting the contents of the blocks:
+
+    BYE
+    200 BLOCK 64 DUMP
+
+This should show the first value being set to `CC`.
+
+    201 BLOCK 64 DUMP
+
+This should show the first value being set to `33`.
+
+Once we've confirmed that this works, we should commit this to block storage.
+
+    100 LIST
+    14 SET 124 LOAD ( store/retrieve )
+
+    124 CLEAN
+    0 SET ( store/retrieve fonts   saf2 2016apr30 )
+    2 SET : n ( ofs n - ) BLOCK UPDATE SWAP fontbuf + SWAP 1024 CMOVE ;
+    3 SET : store ( n - ) 1024 OVER 1+ n  0 SWAP n  FLUSH ;
+
+We then test.
+
+    FLUSH BYE
+    100 LOAD
+    0 design ( ... test as above. )
+
+Retrieving a previously saved font is pretty easy as well.  We just perform the reverse steps.
+
+    : n ( ofs n - ) BLOCK SWAP fontbuf + 1024 CMOVE ;
+    : retrieve ( n - ) 1024 OVER 1+ n  0 SWAP n ;
+
+    200 retrieve
+    0 design
+
+The font editor should show the state of your font as it existed when it was saved.  If so, we can then commit to block storage:
+
+    124 LIST
+    5 SET : n ( ofs n - ) BLOCK SWAP fontbuf + 1024 CMOVE ;
+    6 SET : retrieve ( n - ) 1024 OVER 1+ n  0 SWAP n ;
+
+Be sure to test.
+
+    FLUSH BYE
+    100 LOAD
+    0 design
+
+Note that these words require us to exit back to Forth to load and save our current character set.  Good thing we added `editor` to return to your work!
+
+### Using Your Font Interactively
+
+Now that we have a means of loading a character set into `fontbuf`, we can tell the Kestrel to use it for the normal display font by changing the `FONT` variable.  Thus, making use of a font that we've saved to storage is pretty simple:
+
+    : usefont ( n - ) retrieve fontbuf FONT ! ;
+
+We can test things by using `97 design` and drawing some shapes for the letters `a`, `b`, and so on.  Then, save the character set to an unused pair of blocks (let's say 300), and execute:
+
+    300 usefont
+
+From this point forward, most of your printed text should either be corrupt or blank; however, if you type the letters `a`, `b`, and so forth, your shapes should come up.
+
+Once this is complete, you can commit the code to block storage:
+
+    BYE
+    124 LIST
+    8 SET : usefont ( n - ) retrieve fontbuf FONT ! ;
+
+It would also be convenient to be able to restore the system font.  You might recall we set a variable `sysfnt` to point to the system's default font.  We can use that to restore the default font stored in ROM like so:
+
+    : romfont ( - ) sysfnt @ FONT ! ;
+
+This can be tested just like above; create some dummy characters, save them, use `usefont` to set the font you just created, and then use `romfont` to restore the system's normal font.
+
+    Once this is confirmed working, we can commit this to block storage as well:
+
+    124 LIST
+    9 SET : romfont ( - ) sysfnt @ FONT ! ;
+
+Perform the integration test:
+
+    FLUSH BYE
+    100 LOAD
+    ( ... test as above ... )
+
+If everything works, this concludes the font editor!
+
+## Lessons Learned
+
+While writing this application and chapter, I've learned a few lessons.
+
+### Complete, Self-Hosting Environment.
+
+While the Kestrel-3 environment out-of-the-box is pretty austere, the Kestrel-3 offers everything you need to write real-world applications without the aid of a tethered development system.  The built-in screen editing facilities allows you to conveniently bundle related lines of code together.
+
+Note that organization of the program's blocks relative to one another is left to you.  This highlights the importance of having a single `LOAD` block for an application to serve as a table of contents.
+
+Perhaps, a future revision of the Kestrel firmware will offer built-in support for filesystems and graphical editors.
+
+### Compiler is *Slow!*
+
+While software written *in* Forth runs pretty fast, Forth *itself* is pretty slow when it comes to compiling code.  Indeed, by the end of this chapter, the complete body of code takes me several minutes to compile.  This performance bug is regrettable; however, I placed emphasis on *correctness* rather than speed when porting eForth to the Kestrel environment.
+
+I will address compilation speed in a later firmware revision.
+
+### Application Structure Can Use Some Improvement.
+
+You've observed how a Forth application can grow *organically*.  One of the most frequent problems encountered during its development was how to best order the blocks so that every definition is used in the right order.  However, after gaining experience with developing the font editor, I know better ways to organize the code so that inter-block dependencies are minimized.
+
+The font editor takes input from the keyboard and from a database of glyphs to render state to the screen.  More importantly, it responds to commands, which means *changes* to the display need to be coordinated in a reasonable manner to avoid having to just redraw the entire screen all the time.  One way to accomplish these goals is to structure the software into a set of cooperating modules like so:
+
+![A better decomposition of the editor into modules would make understanding easier.](images/ch2...)
+
+The "main loop" module is simultaneously the main entry point for the program, as well as the top-level event dispatcher and scheduler, much like it is now.  It not only dispatches based on keyboard events like the current software does, but it would also serve as a communications mechanism between different lower-level modules by maintaining just enough state for this to happen.  In this way, we kinds of state exists: your traditional module-specific, encapsulated state, and the state intended to serve as a kind of message-passing service between modules.
+
+For example, the spacebar handler would basically set some "message variables" so that (1) the display update module knows to refresh that fat-bit on the screen, (2) the relevant bytes in the character chart, and finally, (3) the glyph database itself so that its own copy of the data is synchronized with all other components.  This sounds like a lot of plumbing, but in practice, it's actually not any worse than Model-View-Controller relationships in object-oriented programming frameworks.
+
+Likewise, the display update module itself is composed of several smaller pieces (fat-bits, system character chart, user character chart, etc.).  Each of these pieces are themselves hierarchically composed, and so on.  These lower-level modules communicate amongst each other using their own body of intermediate state, and so on.
+
+## Conclusion
+
+This chapter illustrated a typical working session using Kestrel Forth to write a simple font editing application.  As you can see, a lot goes into writing software in general; however, the interactive nature of Forth facilitates writing applications slowly, incrementally, and deliberately.  In the end, we have a not-insignificant application that offers font-editing capabilities on par with many font editors for older 8-bit home computers, such as the Commodore 64/128 or Atari 400/800 line.
+
+Now it's your turn.  What software will you write for the Kestrel-3?
 

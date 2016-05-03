@@ -222,7 +222,7 @@ But, calling `on` and `off` manually isn't the goal; we want to invoke them in a
 Success!  Now we commit this to our program in block memory.
 
     110 LIST
-    7 SET : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE OFF THEN
+    7 SET : pixel ( n a - n' a' ) OVER $80 AND IF on ELSE off THEN
     8 SET     SWAP 2* SWAP ;
     9 SET : row ( n a - ) 7 FOR pixel NEXT 2DROP ;
     FLUSH
@@ -325,24 +325,7 @@ OK, more specifications.  There are several approaches we can take to accomplish
 
 I think it'd be nice to have a small, grey dot in the middle of a cell to indicate the current cell.  Of course, as I write this, the Kestrel-3 does not have greyscale capability, so we'll emulate it with a simple dither pattern, like so:
 
-![The desired cursor shape.](images/ch2...)
-................  0000  0000
-................  0000  0000
-................  0000  0000
-................  0000  0000
-....@.@.@.@.....  0AA0  A00A
-.....@.@.@.@....  0550  5005
-....@.@.@.@.....  0AA0  A00A
-.....@.@.@.@....  0550  5005
-....@.@.@.@.....  0AA0  A00A
-.....@.@.@.@....  0550  5005
-....@.@.@.@.....  0AA0  A00A
-.....@.@.@.@....  0550  5005
-................  0000  0000
-................  0000  0000
-................  0000  0000
-................  0000  0000
-
+![The desired cursor shape.](images/ch2.cursor.bits.png)
 
 I like this design, because it leaves a large portion of the cell visible to the user, while still providing a visual cue to the user which cell is currently referenced by the program.  Other options include cross-hairs, an arrow shape, etc.
 

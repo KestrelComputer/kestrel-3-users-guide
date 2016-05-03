@@ -358,7 +358,7 @@ We can test it out like so:
 
 At this point, we should have a small grey dot in the upper lefthand corner of the screen.
 
-![Proof of concept for the cursor.](images/ch2...)
+![Proof of concept for the cursor.](images/ch2.cursor.test.png)
 
 We see that it works, so let's commit this to block storage for future use.
 
@@ -409,7 +409,7 @@ Well, that was pretty easy.  Let's test it.
 
 The first three prints establish the pattern we want to see; with each increasing coordinate, the resulting address goes up by two.  The final test is just for good measure.
 
-![Testing our address computation so far.](images/ch2...)
+![Testing our address computation so far.](images/ch2.addr.test.png)
 
 **Preconditions again.**  We will *never* invoke this function with a `x` coordinate outside the range of 0 to 7.  So, we do not include any explicit error-checking logic here.  In most other programming languages, the very *thought* of coding like this would be anathema.  If you feel safer adding this bounds-checking logic, I'll leave it as an exercise for you to consider.  However, just be aware: our *intention* that `addr` be invoked with an `x` coordinate in the range 0..7 will be documented in the shadow block later, but it will be *enforced* in the *code* elsewhere.  I can get away with this because `addr` is very clearly a function that is of domain-specific, very limited use outside of the font editor.
 
@@ -423,7 +423,7 @@ Let's try rendering the cursor in the 3rd place over to the right, just to get a
     row row row row
     row row row row
 
-![Cursor appears to the right.](images/ch2...)
+![Cursor appears to the right.](images/ch2.addr.test.2.png)
 
 It's now time to consider the `y` coordinate, or the vertical axis.  Like the horizontal axis, we are going to constrain it to the values 0 to 7 inclusive elsewhere in the code.  But, our address computation is different.  Each fat-bit cell is 16 pixels tall, and as we recall from before, each row on the screen consists of 80 bytes.  So, each row of the fat-bit matrix consists of 1280 bytes of memory.  So, let's account for that in our definition of `addr` now:
 
@@ -437,7 +437,7 @@ As you can see, the effective address computation is a bit more complex, but not
     row row row row
     row row row row
 
-![The cursor can now be placed vertically too.](images/ch2...)
+![The cursor can now be placed vertically too.](images/ch2.addr.test.3.png)
 
 We see that things work, so let's commit this to block storage.
 
@@ -451,7 +451,7 @@ You can probably predict how we're going to write a word that draws the entire 1
     PAGE 0 17 AT-XY
     2 4 cursor 7 5 cursor .S
 
-![We can draw the cursor anywhere we want, and stack looks good.](images/ch2...)
+![We can draw the cursor anywhere we want, and stack looks good.](images/ch2.cursor.placement.test.png)
 
 Now that we have this code working, we can commit this as well.
 
@@ -483,13 +483,15 @@ A final test is to make sure that our fat-bits matrix code and our cursor render
 
 We'd like to create a simple glyph buffer, display it, and present the cursor in its home position (0,0).  That should be enough for now.
 
+    BYE
+    100 LOAD
     VARIABLE glyph
     $1122334455667788 glyph !
     PAGE 0 17 AT-XY  glyph $FF0000 matrix  0 0 cursor
 
 The result should look somewhat like this:
 
-![Confirming that the fat-bit viewing code and the cursor display works together.](images/ch2...)
+![Confirming that the fat-bit viewing code and the cursor display works together.](images/ch2.fat-bits.cursor.png)
 
 Once we know that it does, let's commit it to block storage.
 
@@ -526,6 +528,7 @@ When we're happy with that, let's not forget to update our shadow documentation.
 
 Let's switch gears for a moment.  So far, we've been writing code to provide visual output to the user.  However, we also need to accept input as well.  We know we want the font editor to run as an application; however, we need a way to exit the editor so that the user can return to a normal Forth `ok` prompt whenever he or she wants.  I'm going to pick an arbitrary convention for this now.  We can implement this logic simply enough by waiting for a key press of the letter `Q`, like this:
 
+    BYE
     : quit? ( c - f ) 81 = ;
     : main ( - ) BEGIN KEY quit? UNTIL ;
 
@@ -548,11 +551,12 @@ Once we've confirmed this works as expected, let's bundle it into the rest of ou
 And once more, a simple integration test.
 
     BYE
-    100 LOAD main .S
+    100 LOAD
+    main .S
 
 You should be able to mash on the keyboard all you want; it should not return to an `ok` prompt until you type a capital `Q`.  Furthermore, the data stack should report as empty.
 
-Normally, we'd end up writing a shadow block now, but this code is so simple, and obviously incomplete, that I'll defer that action until we flesh out the code a bit more.  That way, we minimize the amount of rework that's involved.
+Normally, we'd end up writing a shadow block now; from now on, I'm going to skip doing this for brevity's sake.  This chapter is alreay quite long as it is!
 
 ## Where Do We Begin?
 
@@ -562,7 +566,7 @@ At this point, I need to talk more about how Kestrel-3 Forth interprets font dat
 
 Next, we need to adjust how each row of pixels is accessed.  This will involve changing code in block 110.  This is because the Kestrel-3 treats fonts as a single **2048x8** pixel bitmap, instead of as a sequential array of 8x8 bitmaps.  See the following figure to see how these are different.
 
-![The font bitmap is now wider than a single glyph, so now each row is spaced at 256 bytes.](images/ch2...)
+![The font bitmap is now wider than a single glyph, so now each row is spaced at 256 bytes.](images/ch2.font.bitmap.excerpt.png)
 
 The changes are relatively simple, but we must remember to make them.  So, instead of each row of pixels being at sequential addresses, they now appear at 256-byte offsets from each other.
 
@@ -572,17 +576,20 @@ Unfortunately, these changes are not something which can be easily tested intera
 
 Let's begin with creating the 2KiB buffer we'll use for temporary storage.
 
+    0 SET ( full screen update    saf2 2016apr22 )
+    2 SET VARIABLE glyph
+    3 SET $1122334455667788 glyph !
+    4 SET : everything ( - ) PAGE glyph $FF0000 matrix 0 0 cursor ;
+
     106 LIST
-    2 OPEN
-    2 SET CREATE fontbuf  2048 ALLOT
+    3 SET CREATE fontbuf  2048 ALLOT
 
 Next, we're going to alter our `everything` definition to compute the proper glyph address inside this bitmap.
 
-    3 SET : addr ( c - a ) fontbuf + ;
-    4 SET
-    6 SET
-    7 SET : everything ( - ) PAGE glyph @ addr $FF0000 matrix
-    8 SET     0 0 cursor ;
+    4 OPEN
+    4 SET : addr ( c - a ) fontbuf + ;
+    5 SET : everything ( - ) PAGE glyph @ addr $FF0000 matrix
+    6 SET     0 0 cursor ;
 
 That should be all we need to get the fat-bit code to start drawing the matrix.  Getting it to *continue* drawing the right bits in the matrix is the next thing we need to change.
 

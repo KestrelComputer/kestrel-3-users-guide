@@ -877,28 +877,6 @@ Let's test it.
     FLUSH BYE
     100 LOAD
 
-##### NOTE: BEGIN SECTION WHICH NO LONGER APPLIES.
-
-![Mistake: forgot to make `cx` and `cy` accessible to other blocks.](images/ch2.cx.undefined.png)
-
-Well, folks, this is why we test!  It looks like we started to use `cx` and `cy` before they were defined.  So, we need to migrate these variables into a location where all blocks can see them.  In fact, let's move `glyph` as well, since all three are used for video address calculations.
-
-We also need to move the `tile` definition to a place where both block 110 and 108 can use it.  We can simply swap the order of the blocks when `LOAD`ing to fix this problem.
-
-    100 LIST
-    4 OPEN 6 CLOSE
-    4 SET 108 LOAD ( cursor visuals )
-
-Test again:
-
-    FLUSH BYE
-    100 LOAD
-    0 design
-
-At this point, you should have the ability to toggle bits in the fat-bits matrix using the spacebar.  Progress!
-
-##### END SECTION
-
 ## Changing Characters
 
 It would be really inconvenient if the user had to quit the font editor and re-run it from the `ok` prompt whenever he wanted to move to another character.  Particularly when writing games, related groups of characters are often edited together.  For this reason, I want to provide two additional keyboard commands, `[` and `]`, to move to the previous character and to the next character, respectively.

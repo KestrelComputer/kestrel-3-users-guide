@@ -1183,8 +1183,6 @@ One thing you might notice is that, although the display now properly updates wh
 
 Now, as you edit a glyph, it should update in real-time in the character chart area as well.
 
-![Notice how the glyph in the fat-bits area matches the glyph in the character chart area.](images/ch2...)
-
 ## Conveniences
 
 At this point, the font editor, as a distinct program, basically is complete.  You can edit any glyph, you can tell which glyph you're editing, and the display always reflects the current state of the character set.

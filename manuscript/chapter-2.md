@@ -576,11 +576,6 @@ Unfortunately, these changes are not something which can be easily tested intera
 
 Let's begin with creating the 2KiB buffer we'll use for temporary storage.
 
-    0 SET ( full screen update    saf2 2016apr22 )
-    2 SET VARIABLE glyph
-    3 SET $1122334455667788 glyph !
-    4 SET : everything ( - ) PAGE glyph $FF0000 matrix 0 0 cursor ;
-
     106 LIST
     3 SET CREATE fontbuf  2048 ALLOT
 
@@ -622,7 +617,7 @@ We start by implementing the low-level code.  We must recognize that the first-g
 
 The words `cursor-` and `cursor+` hide and reveal the text cursor, respectively.  Without these words, cursor-shaped video artifacts will remain, as the Forth interpreter and our application will compete for access to the same pixels.  Your screen should look like this:
 
-![After drawing the whole screen.](images/ch2...)
+![After drawing the whole screen.](images/ch2.cursor.homed.png)
 
 Notice that the cursor appears at location (0,0) in the matrix.  If we want to move it to location (1,0), for instance, we first must erase the cursor at (0,0), then redraw it at (1,0).
 
@@ -630,7 +625,7 @@ Notice that the cursor appears at location (0,0) in the matrix.  If we want to m
 
 The screen should now look like:
 
-![After moving the cursor.](images/ch2...)
+![After moving the cursor.](images/ch2.cursor.moved.png)
 
 Thus, every cursor movement key must first erase the cursor from where it's currently located, then adjust the coordinates, then redraw.
 
@@ -666,12 +661,12 @@ After confirming the above logic works, we now gain the confidence to do the sam
 Since the logic is so similar to the horizontal movement words, it should be a fairly rote procedure to confirm that the vertical movement words work as intended.  Once this is done, we commit them to block storage.
 
     106 LIST
-    5 SET VARIABLE cx  VARIABLE cy  VARIABLE glyph
-    8 SET     home toggle ;
-    7 OPEN
-    7 SET : home ( - ) 0 cx ! 0 cy ! ;
-    7 OPEN
-    7 SET : toggle ( - ) cx @ cy @ cursor ;
+    2 SET VARIABLE cx  VARIABLE cy  VARIABLE glyph
+    6 SET     home toggle ;
+    5 OPEN
+    5 SET : home ( - ) 0 cx ! 0 cy ! ;
+    5 OPEN
+    5 SET : toggle ( - ) cx @ cy @ cursor ;
 
     112 CLEAN
     0 SET ( cursor movement   saf2 2016apr22 )
@@ -710,7 +705,7 @@ This lays down four bytes into the variable, which form a valid Forth string.  I
 
     ws COUNT TYPE CR
 
-![Two dollar signs are expected.](images/ch2...)
+![Two dollar signs are expected.](images/ch2.dollars.png)
 
 Let's define a simple word according to this template:
 
@@ -762,10 +757,10 @@ Now that we have this logic implemented, we can now easily express our keyboard 
     3 SET : $$s ( - ) goD ;
     4 SET : $$a ( - ) goL ;
     5 SET : $$d ( - ) goR ;
-    7 SET : $$i ( - ) goU ;
-    8 SET : $$k ( - ) goD ;
-    9 SET : $$j ( - ) goL ;
-    10 SET : $$l ( - ) goR ;
+    6 SET : $$i ( - ) goU ;
+    7 SET : $$k ( - ) goD ;
+    8 SET : $$j ( - ) goL ;
+    9 SET : $$l ( - ) goR ;
 
     100 LIST
     8 SET 114 LOAD ( keyboard mappings )
@@ -799,6 +794,8 @@ The former approach requires changing a greater number of lines of code: everyth
 
 At this point, confirm that the cursor keys still work.  Then, press the spacebar.  You should get a worldly greeting!
 
+![Why, hello there!](images/ch2.hello.space.png)
+
 Now that we have the spacebar functionality activated, let's make it do something useful.  We know that we want to *toggle* a bit, which just screams for using `XOR` again, just like we did when drawing and erasing the cursor.  Thus, if we're given a memory address for a byte in a glyph, we can affect one of its bits like so:
 
     : flip ( a m - ) OVER C@ XOR SWAP C! ;
@@ -813,7 +810,7 @@ After executing first `flip` call, you should see a white pixel appear in the up
 
 Next, I'm going to tackle the mask.  We know the cursor location is stored in the variables `cx` and `cy`; `cy` selects which byte in the glyph we want to affect, while `cx` determines which bit.  Note the mapping for bits is backwards from what most other software (and even the processor itself) expects.  See figure for an illustration of what I mean.
 
-![How the CPU addresses bits versus how they map to values of `cx`.](images/ch2...)
+![How the CPU addresses bits versus how they map to values of `cx`.](images/ch2.bits.vs.pixels.png)
 
 Generating the value for `m`, then, involves shifting the value `1` left by 7 positions if `cx` is 0, 6 if it's 1, etc.  In other words:
 
@@ -880,21 +877,11 @@ Let's test it.
     FLUSH BYE
     100 LOAD
 
+##### NOTE: BEGIN SECTION WHICH NO LONGER APPLIES.
+
 ![Mistake: forgot to make `cx` and `cy` accessible to other blocks.](images/ch2.cx.undefined.png)
 
 Well, folks, this is why we test!  It looks like we started to use `cx` and `cy` before they were defined.  So, we need to migrate these variables into a location where all blocks can see them.  In fact, let's move `glyph` as well, since all three are used for video address calculations.
-
-    102 CLEAN
-    0 SET ( global editor state   saf2 2016apr23 )
-    2 SET VARIABLE cx   VARIABLE cy
-    3 SET VARIABLE glyph
-
-    106 LIST
-    5 CLOSE
-
-    100 LIST
-    3 OPEN
-    3 SET 102 LOAD ( global editor state )
 
 We also need to move the `tile` definition to a place where both block 110 and 108 can use it.  We can simply swap the order of the blocks when `LOAD`ing to fix this problem.
 
@@ -909,6 +896,8 @@ Test again:
     0 design
 
 At this point, you should have the ability to toggle bits in the fat-bits matrix using the spacebar.  Progress!
+
+##### END SECTION
 
 ## Changing Characters
 
@@ -937,7 +926,6 @@ Once we're happy that these words behave as we like, let's store a copy into blo
     3 SET : prevg ( - ) glyph @ 1- 0 MAX glyph ! ;
 
     100 LIST
-    9 OPEN
     9 SET 116 LOAD ( character selection )
     FLUSH
 
@@ -986,7 +974,7 @@ OK, about cleaning up the code a bit.  On block 112, we have a lot of words are 
     : behind: ( - ) toggle rswap toggle ;
     : goR ( - ) behind: cx @ 1+ 7 MIN cx ! ;
     PAGE 0 17 AT-XY
-    0 cx ! 0 cy ! toggle
+    home toggle
     goR goR goR
 
 This new version of `goR` should behave exactly like the original on block 112.  Once we demonstrate its effacacy, let's commit it to block storage:
@@ -996,9 +984,9 @@ This new version of `goR` should behave exactly like the original on block 112. 
     1 SET : rswap ( - ) R> R> SWAP >R >R ;
     2 SET : behind: ( - ) toggle rswap toggle ;
     3 SET : goL ( - ) behind: cx @ 1- 0 MAX cx ! ;
-    4 SET : goR ( - ) behind: cx @ 1+ 7 MAX cx ! ;
+    4 SET : goR ( - ) behind: cx @ 1+ 7 MIN cx ! ;
     5 SET : goU ( - ) behind: cy @ 1- 0 MAX cy ! ;
-    6 SET : goD ( - ) behind: cy @ 1+ 7 MAX cy ! ;
+    6 SET : goD ( - ) behind: cy @ 1+ 7 MIN cy ! ;
 
     116 LIST
     5 SET : $$[ ( - ) behind: prevg mag ;
@@ -1028,10 +1016,10 @@ This should show a nice ruler for one half of the display.  Let's see what it'd 
 That's looking pretty nice, actually.  Now let's see if we can use that gap in the middle to let both halves share a common vertical ruler.
 
     : horiz ( - ) 0 18 AT-XY 0-F 2 SPACES 0-F ;
-    : vert ( - ) 15 FOR 33 R@ 2* 20 + AT-XY R@ . NEXT ;
+    : vert ( - ) 15 FOR 32 R@ 2* 20 + AT-XY R@ . NEXT ;
     : axes ( - ) PAGE HEX horiz vert DECIMAL ;
 
-    PAGE HEX horiz vert DECIMAL
+    axes
 
 That works better than I'd expected, actually.  I think I'll keep it.  So, let's commit this to block storage.
 
@@ -1058,7 +1046,7 @@ Next, let's produce the actual character charts.  I'm going to make a lot of tri
 
 At this point, your screen should look something like this:
 
-![Both custom and system fonts rendered, side by side.](images/ch2...)
+![Both custom and system fonts rendered, side by side.](images/ch2.character.charts.png)
 
 Once everything works as planned, let's commit it to block storage.
 
@@ -1072,19 +1060,31 @@ Once everything works as planned, let's commit it to block storage.
     12 SET : charts ( - ) axes fontbuf FONT ! uchart
     13 SET     sysfnt @ FONT ! schart ;
 
-    102 LIST
-    5 SET VARIABLE sysfnt
-    6 SET CREATE fontbuf  2048 ALLOT
-
 Now we need to tie everything into the start-up of the program.
 
     106 LIST
-    9 SET     charts home toggle ;
+    8 SET     charts home toggle ;
+
+    100 LIST
+    5 OPEN
+    5 SET 118 LOAD ( ASCII charts )
+
+Ahh, but wait!  We're referencing variables in block 118 before we define them in subsequent blocks.  We need to relocate these variables to an earlier block.
+
+    102 CLEAN
+    0 SET ( global editor state   saf2 2016apr23 )
+    2 SET VARIABLE cx   VARIABLE cy
+    3 SET VARIABLE glyph
+    4 SET VARIABLE sysfnt
+    5 SET CREATE fontbuf  2048 ALLOT
+
+    106 LIST
+    2 CLOSE
     2 CLOSE
 
     100 LIST
-    6 OPEN
-    6 SET 118 LOAD ( ASCII charts )
+    3 OPEN
+    3 SET 102 LOAD ( global editor state )
 
 And now, it's time to test what we have so far.
 
@@ -1094,19 +1094,20 @@ And now, it's time to test what we have so far.
 
 Your display should look like this:
 
-![Editor showing both system and edited fonts.](images/ch2...)
+![Editor showing both system and edited fonts.](images/ch2.editor.1.png)
 
 As cool as this is, we still can't *see* which glyph we've selected for editing.  To make this visible to the user, we want to draw a box around the currently selected glyph as a visual cue/reminder to the user.  We'll use a dotted box, since it'll be more visually distinct without being a distraction to the user.
 
-![The dotted box bitmap.](images/ch2...)
+![The dotted box bitmap.](images/ch2.dotted.box.png)
 
     120 CLEAN
     0 SET ( glyph highlights   saf2 2016apr24 )
-    2 SET CREATE box
-    3 SET   $000000 , $000000 , $A0AA0A , $100000 ,
-    4 SET   $000008 , $100000 , $000008 , $100000 ,
-    5 SET   $000008 , $100000 , $000008 , $100000 ,
-    6 SET   $000008 , $505505 , $000000 , $000000 ,
+    2 SET CREATE box HEX
+    3 SET 000000 , 000000 , A0AA0A , 100000 ,
+    4 SET 000008 , 100000 , 000008 , 100000 ,
+    5 SET 000008 , 100000 , 000008 , 100000 ,
+    6 SET 000008 , 505505 , 000000 , 000000 ,
+    7 SET DECIMAL
 
     FLUSH 120 LOAD
 
@@ -1114,7 +1115,7 @@ We're going to render the box just like we did the fat-bit matrix; however, inst
 
     : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
         1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
-    : rows ( - ) box 15 FOR DUP C@ $FF0000 R@ 80 * + row
+    : rows ( - ) box 15 FOR DUP @ $FF0000 R@ 80 * + row
         CELL+ NEXT DROP ;
 
 In this case `p` refers to a set of pixels, and not an address to some pixels.  So, we can test this on the display fairly easily:
@@ -1141,15 +1142,15 @@ The only thing is, `where` currently has the wrong base address.  It places the 
 So, let's commit to block storage now.
 
     120 LIST
-    7 SET : where ( - a ) chartbase @ glyph @ 15 AND 2* +
-    8 SET     glyph @ 4 RSHIFT 1280 * + 320 + ;
-    9 SET : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
-    10 SET    1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
-    11 SET : rows ( - ) box 15 FOR DUP @ where R@ 80 * + row
-    12 SET     CELL+ NEXT DROP ;
+    8 SET : where ( - a ) chartbase @ glyph @ 15 AND 2* +
+    9 SET     glyph @ 4 RSHIFT 1280 * + ;
+    10 SET : row ( p a - ) 2 FOR 2DUP SWAP OVER C@ XOR SWAP C!
+    11 SET    1+ SWAP 8 RSHIFT SWAP NEXT 2DROP ;
+    12 SET : rows ( - ) box 15 FOR DUP @ where R@ 80 * + row
+    13 SET     CELL+ NEXT DROP ;
 
     102 LIST
-    8 SET VARIABLE chartbase
+    6 SET VARIABLE chartbase
 
 Now, all we need to do is tie this logic into updating the display, making sure to set `chartbase` to the appropriate (and correct) base address first.
 
@@ -1158,7 +1159,7 @@ Now, all we need to do is tie this logic into updating the display, making sure 
     14 SET : uhi ( - ) $FF30E2 chartbase ! rows ;
 
     106 LIST
-    8 SET     charts shi uhi home toggle ;
+    6 SET     charts shi uhi home toggle ;
 
 Let's test how it looks.
 
@@ -1189,11 +1190,14 @@ One thing you might notice is that, although the display now properly updates wh
     2 SET : rowa ( - a ) $FF3223 glyph @ 15 AND 2* +
     3 SET     glyph @ 4 RSHIFT 1280 * +
     4 SET     cy @ 80 * + ;
-    5 SET : upd ( - ) glyph @ cy @ addr rowa C! ;
+    5 SET : upd ( - ) glyph @ cy @ addr C@ rowa C! ;
 
     100 LIST
-    12 OPEN
-    12 SET 122 LOAD ( user-defined character update )
+    11 OPEN
+    11 SET 122 LOAD ( user-defined character update )
+
+    114 LIST
+    11 SET : $$_ ( - ) behind: change fatbit upd ;
 
     FLUSH BYE
     100 LOAD
@@ -1247,7 +1251,7 @@ Saving should be as simple as copying the contents of the font buffer `fontbuf` 
 
 Note that we enforce flushing as a convenience.  Let's test it first executing `0 design`, and making the glyph look as follows:
 
-![This glyph shape lets us confirm proper operation of the `store` procedure.](images/ch2...)
+![This glyph shape lets us confirm proper operation of the `store` procedure.](images/ch2.test.tile.png)
 
 Press `Q`, and then type:
 
@@ -1351,11 +1355,11 @@ Note that organization of the program's blocks relative to one another is left t
 
 Perhaps, a future revision of the Kestrel firmware will offer built-in support for filesystems and graphical editors.
 
-### Compiler is *Slow!*
+### Forth V1.01 Compiler is *Slow!*
 
 While software written *in* Forth runs pretty fast, Forth *itself* is pretty slow when it comes to compiling code.  Indeed, by the end of this chapter, the complete body of code takes me several minutes to compile.  This performance bug is regrettable; however, I placed emphasis on *correctness* rather than speed when porting eForth to the Kestrel environment.
 
-I will address compilation speed in a later firmware revision.
+I will address compilation speed in a later firmware revision.  Although, if someone else beats me to the punch, I'll happily accept a pull request.
 
 ### Application Structure Can Use Some Improvement.
 
@@ -1363,9 +1367,9 @@ You've observed how a Forth application can grow *organically*.  One of the most
 
 The font editor takes input from the keyboard and from a database of glyphs to render state to the screen.  More importantly, it responds to commands, which means *changes* to the display need to be coordinated in a reasonable manner to avoid having to just redraw the entire screen all the time.  One way to accomplish these goals is to structure the software into a set of cooperating modules like so:
 
-![A better decomposition of the editor into modules would make understanding easier.](images/ch2...)
+![A better decomposition of the editor into modules would make understanding easier.](images/ch2.bus.structure.png)
 
-The "main loop" module is simultaneously the main entry point for the program, as well as the top-level event dispatcher and scheduler, much like it is now.  It not only dispatches based on keyboard events like the current software does, but it would also serve as a communications mechanism between different lower-level modules by maintaining just enough state for this to happen.  In this way, we kinds of state exists: your traditional module-specific, encapsulated state, and the state intended to serve as a kind of message-passing service between modules.
+The "main loop" module is simultaneously the main entry point for the program, as well as the top-level event dispatcher and scheduler, much like it is now.  It would make use of some variables as a shared communications bus of sorts, scheduling tasks to be performed in the lower-level modules.  Thus, program logic alternates between self-contained modules and connective state.
 
 For example, the spacebar handler would basically set some "message variables" so that (1) the display update module knows to refresh that fat-bit on the screen, (2) the relevant bytes in the character chart, and finally, (3) the glyph database itself so that its own copy of the data is synchronized with all other components.  This sounds like a lot of plumbing, but in practice, it's actually not any worse than Model-View-Controller relationships in object-oriented programming frameworks.
 
